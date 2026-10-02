@@ -1,3 +1,4 @@
+import { notebookScopedFetch } from '@/features/workspace/general/notebook-request-context';
 import {
   parseTeachingTurnEvent,
   TurnStreamProtocolError,
@@ -256,7 +257,8 @@ export class TurnRecoveryController {
   private readonly sleep: NonNullable<TurnRecoveryControllerOptions['sleep']>;
 
   constructor(private readonly options: TurnRecoveryControllerOptions) {
-    this.fetchImpl = options.fetchImpl ?? ((input, init) => fetch(input, init));
+    this.fetchImpl =
+      options.fetchImpl ?? ((input, init) => notebookScopedFetch(input, init));
     this.maxAttempts = Math.max(1, Math.min(180, options.maxAttempts ?? 120));
     this.retryDelaysMs = options.retryDelaysMs ?? [1_000];
     this.sleep = options.sleep ?? defaultSleep;

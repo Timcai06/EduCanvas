@@ -1,3 +1,4 @@
+import { readTeachingRequestScope } from '@/server/teaching/request-scope';
 import {
   AssetAccessError,
   ChatMessageIdConflictError,
@@ -46,7 +47,10 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const body = await parseTeachingTurnRequest(request);
-    const turn = await beginTeachingGatewayTurn(identity, body);
+    const scope = readTeachingRequestScope(request);
+    const turn = scope
+      ? await beginTeachingGatewayTurn(identity, body, scope)
+      : await beginTeachingGatewayTurn(identity, body);
     return sseResponse(createTeachingTurnEventStream(turn.events));
   } catch (error) {
     if (error instanceof TurnRequestValidationError) {

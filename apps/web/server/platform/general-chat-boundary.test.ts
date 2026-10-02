@@ -9,15 +9,19 @@ function source(path: string) {
 describe('默认通用Chat产品边界', () => {
   it('根入口组合通用Chat而不是K12课程页', () => {
     const page = source('../../app/page.tsx');
-    expect(page).toContain('GeneralChatWorkspace');
+    expect(page).toContain('GeneralChatEntry');
+    expect(page).toContain('notebookConversationPath(data.conversation)');
     expect(page).not.toContain('demoLesson');
     expect(page).not.toContain('bootstrapAnonymousLesson');
     expect(page).not.toContain('猫狗');
   });
 
   it('Conversation ID变化时重建客户端工作区并重新水合历史消息', () => {
-    const page = source('../../app/page.tsx');
+    const page = source(
+      '../../app/notebook/[notebookId]/conversation/[conversationId]/page.tsx',
+    );
     expect(page).toContain('key={data.conversation.id}');
+    expect(page).toContain('loadGeneralChatPageData(ids)');
   });
 
   it('通用Turn不导入教学Session、教学工具或固定课程', () => {

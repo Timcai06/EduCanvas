@@ -1,5 +1,10 @@
 'use client';
 
+import {
+  notebookScopedFetch,
+  readNotebookRequestContext,
+} from '@/features/workspace/general/notebook-request-context';
+
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 import type {
   AgentAssetPart,
@@ -49,13 +54,6 @@ export interface AgentTurnSendOptions {
   mode?: 'chat' | 'deep_research';
 }
 
-const TEACHING_TURN_OPTIONS: AgentTurnClientOptions = {
-  endpoint: '/api/v1/learn/turn',
-  assistantLabel: 'AI 老师',
-  cancelEndpoint: (turnId) =>
-    `/api/v1/learn/turn/${encodeURIComponent(turnId)}/cancel`,
-};
-
 export function useAgentTurn(
   initialMessages: readonly InitialChatMessageDTO[],
   options: AgentTurnClientOptions,
@@ -96,9 +94,13 @@ export function useAgentTurn(
         return false;
       }
       try {
-        const response = await fetch(cancelEndpoint(current.turnId), {
-          method: 'POST',
-        });
+        const response = await notebookScopedFetch(
+          cancelEndpoint(current.turnId),
+          {
+            method: 'POST',
+          },
+          current.notebookRequestContext,
+        );
         if (!response.ok) {
           setControlError('暂时无法停止回答，请稍后重试。');
           return false;
@@ -171,6 +173,7 @@ export function useAgentTurn(
 
       const clientMessageId = suppliedId ?? crypto.randomUUID();
       const current: InFlightTurn = {
+        notebookRequestContext: readNotebookRequestContext(),
         clientMessageId,
         controller: new AbortController(),
         turnId: null,
@@ -217,22 +220,26 @@ export function useAgentTurn(
       });
 
       try {
-        const response = await fetch(options.endpoint, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            ...(assetParts.length > 0
-              ? { clientMessageId, parts: requestParts }
-              : { clientMessageId, text: normalizedText }),
-            ...(sendOptions.outputPreference
-              ? { outputPreference: sendOptions.outputPreference }
-              : {}),
-            ...(sendOptions.mode === 'deep_research'
-              ? { mode: sendOptions.mode }
-              : {}),
-          }),
-          signal: current.controller.signal,
-        });
+        const response = await notebookScopedFetch(
+          options.endpoint,
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              ...(assetParts.length > 0
+                ? { clientMessageId, parts: requestParts }
+                : { clientMessageId, text: normalizedText }),
+              ...(sendOptions.outputPreference
+                ? { outputPreference: sendOptions.outputPreference }
+                : {}),
+              ...(sendOptions.mode === 'deep_research'
+                ? { mode: sendOptions.mode }
+                : {}),
+            }),
+            signal: current.controller.signal,
+          },
+          current.notebookRequestContext,
+        );
         if (!response.ok) {
           const routeError = await readPublicError(
             response,
@@ -411,8 +418,4 @@ export function useAgentTurn(
   } as const;
 }
 
-export function useTeachingTurn(
-  initialMessages: readonly InitialChatMessageDTO[],
-) {
-  return useAgentTurn(initialMessages, TEACHING_TURN_OPTIONS);
-}
+export { useTeachingTurn } from './use-teaching-turn-scoped';

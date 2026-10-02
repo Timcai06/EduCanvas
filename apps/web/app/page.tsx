@@ -1,10 +1,9 @@
 import { GeneralChatEntry } from '@/features/workspace/general/general-chat-entry';
-import { GeneralChatWorkspace } from '@/features/workspace/general/general-chat-workspace';
+import { redirect } from 'next/navigation';
+import { notebookConversationPath } from '@/server/platform/general-conversation';
 import { parseHomeFocusParam } from '@/features/workspace/general/home-focus';
 import { readCurrentWebUser } from '@/server/auth/current-user';
 import { loadGeneralChatPageData } from '@/server/platform/general-conversation';
-import { isWebSearchConfigured } from '@/server/tools/web-search';
-import { DEEP_RESEARCH_UNAVAILABLE_MESSAGE } from '@/features/errors/public-error';
 
 /**
  * 保持首页为低认知负担的单入口，让首次使用的学生直接进入学习主流程。
@@ -24,20 +23,13 @@ export default async function HomePage({
     loadGeneralChatPageData(),
     readCurrentWebUser(),
   ]);
-  return data ? (
-    <GeneralChatWorkspace
-      key={data.conversation.id}
-      initialMessages={data.initialMessages}
-      conversationId={data.conversation.id}
-      notebookId={data.conversation.spaceId}
-      notebookTitle={data.conversation.title}
-      nickname={user?.nickname}
-      focusTarget={focusTarget}
-      deepResearchUnavailableReason={
-        isWebSearchConfigured() ? null : DEEP_RESEARCH_UNAVAILABLE_MESSAGE
-      }
-    />
-  ) : (
-    <GeneralChatEntry nickname={user?.nickname} />
-  );
+  if (data) {
+    const path = notebookConversationPath(data.conversation);
+    redirect(
+      focusTarget
+        ? `${path}?focus=${encodeURIComponent(`${focusTarget.kind}:${focusTarget.resourceId}`)}`
+        : path,
+    );
+  }
+  return <GeneralChatEntry nickname={user?.nickname} />;
 }

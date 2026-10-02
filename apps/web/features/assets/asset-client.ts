@@ -1,3 +1,9 @@
+import {
+  notebookScopedFetch,
+  readNotebookRequestContext,
+  scopeNotebookResourceUrls,
+  type NotebookRequestContext,
+} from '@/features/workspace/general/notebook-request-context';
 import type { AssetItem } from './assets-drawer';
 import {
   assetPreviewSchema,
@@ -102,9 +108,10 @@ function toItem(
 async function resourceFetch(
   url: string,
   init?: RequestInit,
+  requestContext?: NotebookRequestContext | null,
 ): Promise<Response> {
   try {
-    return await fetch(url, init);
+    return await notebookScopedFetch(url, init, requestContext);
   } catch (cause: unknown) {
     if (isAbortError(cause)) throw cause;
     throw new ResourceClientError(
@@ -299,10 +306,14 @@ export async function renameAsset(input: {
 }
 
 /** 读取当前Notebook内的来源预览；响应契约不会暴露对象存储地址。 */
-export async function loadAssetPreview(assetId: string): Promise<AssetPreview> {
+export async function loadAssetPreview(
+  assetId: string,
+  context = readNotebookRequestContext(),
+): Promise<AssetPreview> {
   const response = await resourceFetch(
     `/api/v1/chat/assets/${encodeURIComponent(assetId)}/preview`,
     { cache: 'no-store' },
+    context,
   );
   if (!response.ok) {
     throw await clientError(response, '暂时无法预览这个来源。');
@@ -313,14 +324,18 @@ export async function loadAssetPreview(assetId: string): Promise<AssetPreview> {
   if (!parsed.success) {
     throw new ResourceClientError('failed', '来源预览响应格式不正确。');
   }
-  return parsed.data.preview;
+  return scopeNotebookResourceUrls(parsed.data.preview, context);
 }
 
 /** 软删除当前Notebook内的来源；服务端仍保留审计状态和后续物理清理依据。 */
-export async function deleteAsset(assetId: string): Promise<void> {
+export async function deleteAsset(
+  assetId: string,
+  context = readNotebookRequestContext(),
+): Promise<void> {
   const response = await resourceFetch(
     `/api/v1/chat/assets/${encodeURIComponent(assetId)}`,
     { method: 'DELETE' },
+    context,
   );
   if (!response.ok) {
     throw await clientError(response, '暂时无法删除这个来源。');

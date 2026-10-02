@@ -9,6 +9,8 @@ import {
 import {
   createGeneralConversation,
   writeActiveConversationCookie,
+  notebookConversationPath,
+  isValidConversationId,
 } from '@/server/platform/general-conversation';
 import { DrizzlePlatformConversationRepository } from '@educanvas/db';
 
@@ -20,7 +22,7 @@ export async function startGeneralChatAction(): Promise<void> {
     await writeAnonymousIdentityCookie(identity.token);
   }
   await writeActiveConversationCookie(conversation.id);
-  redirect('/');
+  redirect(notebookConversationPath(conversation));
 }
 
 export async function startNewGeneralChatAction(): Promise<void> {
@@ -30,7 +32,7 @@ export async function startNewGeneralChatAction(): Promise<void> {
     await writeAnonymousIdentityCookie(identity.token);
   }
   await writeActiveConversationCookie(conversation.id);
-  redirect('/');
+  redirect(notebookConversationPath(conversation));
 }
 
 /** 切换笔记本:当前一对一投影以主Conversation为游标，越权静默忽略。 */
@@ -38,13 +40,16 @@ export async function switchConversationAction(
   conversationId: string,
 ): Promise<void> {
   const identity = await readAnonymousIdentity();
-  if (identity) {
+  if (identity && isValidConversationId(conversationId)) {
     const conversations = new DrizzlePlatformConversationRepository();
     const owned = await conversations.getOwned({
       conversationId,
       trustedSubjectId: identity.studentId,
     });
-    if (owned) await writeActiveConversationCookie(owned.id);
+    if (owned) {
+      await writeActiveConversationCookie(owned.id);
+      redirect(notebookConversationPath(owned));
+    }
   }
   redirect('/');
 }

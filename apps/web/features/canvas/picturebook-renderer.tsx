@@ -7,6 +7,8 @@ import gsap from 'gsap';
 import Image from 'next/image';
 import { useEffect, useRef, useState } from 'react';
 import { motionDuration } from '@/features/theme/motion';
+import { notebookScopedUrl } from '@/features/workspace/general/notebook-request-context';
+import { useNotebookRequestScope } from '@/features/workspace/general/notebook-request-scope';
 import { useSwipeGesture } from './use-swipe-gesture';
 
 gsap.registerPlugin(useGSAP);
@@ -24,6 +26,7 @@ export function PicturebookRenderer({
   title: string;
   content: PicturebookContent;
 }) {
+  const requestContext = useNotebookRequestScope();
   const rootRef = useRef<HTMLElement>(null);
   const [pageIndex, setPageIndex] = useState(0);
   /* 方向感知：入场动画从操作方向侧滑入，翻上一页/下一页观感不同 */
@@ -49,9 +52,9 @@ export function PicturebookRenderer({
       const neighbor = content.pages[pageIndex + offset];
       if (!neighbor) continue;
       const img = new window.Image();
-      img.src = neighbor.imageUrl;
+      img.src = notebookScopedUrl(neighbor.imageUrl, requestContext);
     }
-  }, [content.pages, pageIndex]);
+  }, [content.pages, pageIndex, requestContext]);
 
   useGSAP(
     () => {
@@ -106,7 +109,7 @@ export function PicturebookRenderer({
           <div data-picturebook-page className="absolute inset-0">
             <Image
               key={page.imageUrl}
-              src={page.imageUrl}
+              src={notebookScopedUrl(page.imageUrl, requestContext)}
               alt={page.captionText}
               fill
               unoptimized

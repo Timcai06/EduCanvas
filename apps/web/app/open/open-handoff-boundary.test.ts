@@ -34,13 +34,13 @@ describe('open handoff route', () => {
 
   it('redirects with a focus param derived from the consumed precise target (DP08)', () => {
     expect(source).toMatch(
-      /if\s*\(result\.status === 'consumed'\)[\s\S]*redirect\(toHomePathWithFocus\(result\.target\)\)/,
+      /if\s*\(result\.status === 'consumed'\)[\s\S]*getOwned\([\s\S]*notebookConversationPath\(conversation\)/,
     );
     expect(source).toContain('return `/?focus=artifact:${target.artifactId}`');
     expect(source).toContain(
       "return `/?focus=${target.resourceKind === 'source' ? 'source' : 'artifact'}:${target.resourceId}`;",
     );
-    // message/conversation/null 一律回首页，不携带资源 id。
+    // message/conversation/null 只进入已验证的Notebook，不附加资源focus。
     expect(source).not.toContain("searchParams.get('resource')");
   });
 });

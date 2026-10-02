@@ -7,7 +7,10 @@ import {
   linkTrafficKey,
   linkTrafficLimiter,
 } from '@/server/assets/link-traffic-limiter';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedNotebookResourceRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -44,8 +47,12 @@ export async function POST(request: Request): Promise<Response> {
   try {
     identity = await readAnonymousIdentity();
     if (!identity) return jsonError(401, 'unauthorized');
-    conversation = await loadOwnedGeneralConversation(identity);
-    if (!conversation) return jsonError(401, 'unauthorized');
+    conversation = await loadOwnedGeneralConversation(identity, request);
+    if (!conversation)
+      return jsonError(
+        hasGeneralRequestContext(request) ? 404 : 401,
+        'unauthorized',
+      );
   } catch {
     return linkErrorResponse(
       new LinkImportError('link_import_unavailable', true),

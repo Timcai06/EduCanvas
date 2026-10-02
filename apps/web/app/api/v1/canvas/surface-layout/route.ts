@@ -1,5 +1,8 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedNotebookResourceRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -36,10 +39,10 @@ const positionSchema = z
   })
   .strict();
 
-async function identityAndNotebook() {
+async function identityAndNotebook(request: Request) {
   const identity = await readAnonymousIdentity();
   if (!identity) return null;
-  const conversation = await loadOwnedGeneralConversation(identity);
+  const conversation = await loadOwnedGeneralConversation(identity, request);
   if (!conversation) return null;
   return { identity, notebookId: conversation.spaceId };
 }
@@ -59,9 +62,13 @@ function projectPosition(
   };
 }
 
-export async function GET(): Promise<Response> {
-  const resolved = await identityAndNotebook();
-  if (!resolved) return jsonError(401, 'unauthorized');
+export async function GET(request: Request): Promise<Response> {
+  const resolved = await identityAndNotebook(request);
+  if (!resolved)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
   try {
     const rows = await new DrizzleNotebookSurfacePositionRepository().list({
       spaceId: resolved.notebookId,
@@ -77,8 +84,12 @@ export async function PUT(request: Request): Promise<Response> {
   if (!isTrustedSameOriginWrite(request)) {
     return jsonError(403, 'forbidden_origin');
   }
-  const resolved = await identityAndNotebook();
-  if (!resolved) return jsonError(401, 'unauthorized');
+  const resolved = await identityAndNotebook(request);
+  if (!resolved)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
   try {
     const parsed = positionSchema.safeParse(
       await readLimitedJsonRequest(request, { maxBytes: 8 * 1024 }),

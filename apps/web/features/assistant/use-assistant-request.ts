@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { notebookScopedFetch } from '@/features/workspace/general/notebook-request-context';
 import { PENDING_GENERAL_MENU_ACTION_KEY } from '@/features/workspace/general/general-chat-entry';
 import { readPublicError } from '@/features/errors/public-error';
 
@@ -64,7 +65,7 @@ export function useAssistantRequest() {
     };
 
     try {
-      const response = await fetch('/api/v1/assistant/turn', {
+      const response = await notebookScopedFetch('/api/v1/assistant/turn', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         credentials: 'same-origin',

@@ -52,7 +52,7 @@ export async function POST(request: Request): Promise<Response> {
 
   try {
     const body = await parseTeachingTurnRequest(request);
-    const turn = await beginWebGatewayTurn(identity, body);
+    const turn = await beginWebGatewayTurn(identity, body, request);
     return sseResponse(createSseEventStream(turn.events));
   } catch (error) {
     if (error instanceof TurnRequestValidationError) {

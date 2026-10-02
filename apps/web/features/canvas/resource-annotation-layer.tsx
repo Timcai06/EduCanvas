@@ -6,6 +6,7 @@ import type {
 } from '@educanvas/canvas-protocol';
 import { useEffect, useState } from 'react';
 import { fetchResourceAnnotations } from './resource-annotation-client';
+import { useNotebookRequestScope } from '@/features/workspace/general/notebook-request-scope';
 
 function Mark({ annotation }: { annotation: CanvasAnnotation }) {
   const { x, y, width = 0.16, height = 0.11 } = annotation.geometry;
@@ -45,12 +46,14 @@ export function ResourceAnnotationLayer({
   resourceKind: CanvasResourceKind;
   resourceId: string;
 }) {
+  const requestContext = useNotebookRequestScope();
   const [annotations, setAnnotations] = useState<readonly CanvasAnnotation[]>(
     [],
   );
   useEffect(() => {
     const controller = new AbortController();
     void fetchResourceAnnotations({
+      requestContext,
       resourceKind,
       resourceId,
       signal: controller.signal,
@@ -58,7 +61,7 @@ export function ResourceAnnotationLayer({
       .then(setAnnotations)
       .catch(() => undefined);
     return () => controller.abort();
-  }, [resourceId, resourceKind]);
+  }, [resourceId, resourceKind, requestContext]);
 
   if (annotations.length === 0) return null;
   return (

@@ -1,3 +1,6 @@
+import { readTeachingRequestScope } from '@/server/teaching/request-scope';
+import { loadOwnedTeachingGatewayTarget } from '@/server/teaching/learning-session';
+import { TurnRequestValidationError } from '@/server/http/turn-request';
 import { ChatLifecycleError, DrizzleChatRepository } from '@educanvas/db';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
@@ -25,6 +28,24 @@ export async function POST(
 
   const { turnId } = await context.params;
   try {
+    const scope = readTeachingRequestScope(request);
+    if (scope) {
+      const target = await loadOwnedTeachingGatewayTarget(
+        identity,
+        scope.notebookId,
+        scope.conversationId,
+      );
+      const owned = await chat.getOwnedTurnByTurnId({
+        trustedStudentId: identity.studentId,
+        turnId,
+      });
+      if (
+        !target ||
+        !owned ||
+        owned.studentMessage.sessionId !== target.sessionId
+      )
+        return jsonError(404, 'turn_not_found');
+    }
     const result = await chat.requestTurnCancellation({
       trustedStudentId: identity.studentId,
       turnId,
@@ -43,6 +64,8 @@ export async function POST(
       { headers: { 'cache-control': 'no-store' } },
     );
   } catch (error) {
+    if (error instanceof TurnRequestValidationError)
+      return jsonError(400, error.code);
     if (error instanceof ChatLifecycleError) {
       return jsonError(400, 'invalid_turn');
     }

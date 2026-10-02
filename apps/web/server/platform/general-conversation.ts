@@ -104,11 +104,24 @@ export async function loadOwnedGeneralConversationForSubject(
   return active?.agentProfileId === 'general' ? active : loadRecent();
 }
 
-export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | null> {
+export async function loadGeneralChatPageData(explicit?: {
+  notebookId: string;
+  conversationId: string;
+}): Promise<GeneralChatPageData | null> {
   const identity = await readAnonymousIdentity();
   if (!identity) return null;
-  const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation || conversation.agentProfileId !== 'general') return null;
+  const conversation = explicit
+    ? await conversations.getOwned({
+        conversationId: explicit.conversationId,
+        trustedSubjectId: identity.studentId,
+      })
+    : await loadOwnedGeneralConversation(identity);
+  if (
+    !conversation ||
+    conversation.agentProfileId !== 'general' ||
+    (explicit && conversation.spaceId !== explicit.notebookId)
+  )
+    return null;
   const messages = await turns.listMessages({
     conversationId: conversation.id,
     trustedSubjectId: identity.studentId,
@@ -186,4 +199,16 @@ export async function loadGeneralChatPageData(): Promise<GeneralChatPageData | n
       completedAt: message.completedAt,
     })),
   };
+}
+
+/** Notebook URL 使用 Space ID，Cookie 只保留兼容入口游标。 */
+export function notebookConversationPath(
+  conversation: Pick<
+    PlatformConversationSnapshot,
+    'spaceId' | 'id' | 'agentProfileId'
+  >,
+): string {
+  return conversation.agentProfileId === 'general'
+    ? `/notebook/${conversation.spaceId}/conversation/${conversation.id}`
+    : `/notebook/${conversation.spaceId}/learn`;
 }

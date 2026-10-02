@@ -6,10 +6,13 @@ import {
   jsonResponse,
 } from '@/server/http/request-security';
 import {
-  loadOwnedGeneralConversation,
   writeActiveConversationCookie,
   clearActiveConversationCookie,
 } from '@/server/platform/general-conversation';
+import {
+  loadOwnedGeneralRequestConversation,
+  forwardGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import { checkAssistantRateLimit } from '@/server/assistant/rate-limit';
 import {
   AssistantClassifyError,
@@ -110,7 +113,10 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError(429, 'rate_limited');
   }
 
-  const conversation = await loadOwnedGeneralConversation(identity);
+  const conversation = await loadOwnedGeneralRequestConversation(
+    identity,
+    request,
+  );
   if (!conversation) {
     return jsonError(404, 'conversation_not_found');
   }
@@ -171,10 +177,10 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       case 'list_artifacts': {
-        const artUrl = new URL(
+        const artUrl = forwardGeneralRequestContext(
           '/api/v1/chat/artifacts',
-          request.url,
-        ).toString();
+          request,
+        );
         const artRes = await fetch(artUrl, {
           headers: { cookie: request.headers.get('cookie') ?? '' },
         });
@@ -307,10 +313,10 @@ export async function POST(request: Request): Promise<Response> {
 
       case 'open_artifact': {
         // 获取当前笔记本的产物列表，按标题匹配
-        const artifactsUrl = new URL(
+        const artifactsUrl = forwardGeneralRequestContext(
           '/api/v1/chat/artifacts',
-          request.url,
-        ).toString();
+          request,
+        );
         const artListRes = await fetch(artifactsUrl, {
           headers: { cookie: request.headers.get('cookie') ?? '' },
         });

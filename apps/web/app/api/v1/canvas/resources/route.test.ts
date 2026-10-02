@@ -51,6 +51,7 @@ describe('GET /api/v1/canvas/resources', () => {
     expect(response.status).toBe(200);
     expect(readEffectiveSubject).toHaveBeenCalledTimes(1);
     expect(listWorkspaceResourceSummaries).toHaveBeenCalledWith({
+      request: expect.any(Request),
       dataOwnerKind: 'registered',
       dataOwnerId: 'owner-1',
       filter: 'source',

@@ -1,5 +1,8 @@
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedNotebookResourceRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -32,10 +35,10 @@ const paramsSchema = z
   })
   .strict();
 
-async function resolveIdentity() {
+async function resolveIdentity(request: Request) {
   const identity = await readAnonymousIdentity();
   if (!identity) return null;
-  const conversation = await loadOwnedGeneralConversation(identity);
+  const conversation = await loadOwnedGeneralConversation(identity, request);
   if (!conversation) return null;
   return { identity, notebookId: conversation.spaceId };
 }
@@ -48,15 +51,19 @@ function accessError(error: unknown): Response {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ resourceKind: string; resourceId: string }> },
 ): Promise<Response> {
   const params = paramsSchema.safeParse(await context.params);
   if (!params.success) {
     return jsonError(404, 'resource_not_found');
   }
-  const resolved = await resolveIdentity();
-  if (!resolved) return jsonError(401, 'unauthorized');
+  const resolved = await resolveIdentity(request);
+  if (!resolved)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
   try {
     return jsonResponse({
       annotations: await listOwnedResourceAnnotations({
@@ -80,8 +87,12 @@ export async function POST(
   if (!params.success) {
     return jsonError(404, 'resource_not_found');
   }
-  const resolved = await resolveIdentity();
-  if (!resolved) return jsonError(401, 'unauthorized');
+  const resolved = await resolveIdentity(request);
+  if (!resolved)
+    return jsonError(
+      hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
   try {
     const parsed = createCanvasAnnotationSchema.safeParse(
       await readLimitedJsonRequest(request, { maxBytes: 16 * 1024 }),

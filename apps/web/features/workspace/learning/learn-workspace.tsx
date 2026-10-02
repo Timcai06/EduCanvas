@@ -1,5 +1,7 @@
 'use client';
 
+import { NotebookRequestScopeProvider } from '@/features/workspace/general/notebook-request-scope';
+import { notebookScopedUrl } from '@/features/workspace/general/notebook-request-context';
 import { submitCanvasAction } from '@/app/learn/actions';
 import type { AssetItem } from '@/features/assets/assets-drawer';
 import { AssetsDrawer } from '@/features/assets/assets-drawer';
@@ -17,17 +19,19 @@ import {
   type LiveVoiceContextAsset,
   type LiveVoiceContextSnapshot,
 } from '@/features/voice/live-voice-context';
+import {
+  AI_UNAVAILABLE_MESSAGE,
+  LEARN_MENU_ACTIONS,
+  CHAT_PCT_DEFAULT,
+  CHAT_PCT_MIN,
+  CHAT_PCT_MAX,
+} from './learning-workspace-config';
+import type { LearningPageDTO } from '@/features/learning/learning-contracts';
+import { useLearningCanvasSubmission } from './use-learning-canvas-submission';
 import type { PlusMenuActionId } from '@/features/composer/plus-menu';
-import type {
-  CanvasFeedbackDTO,
-  CanvasSubmissionDraft,
-  CanvasSubmissionInput,
-  LearningPageDTO,
-} from '@/features/learning/learning-contracts';
-import { createCanvasSubmissionInput } from '@/features/learning/canvas-submission';
 import { ProgressDrawer } from '@/features/progress/progress-drawer';
 import { StudioDrawer } from '@/features/studio/studio-drawer';
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Sheet } from '@/components/sheet';
 import { EmptyChatHero } from '../shared/empty-chat-hero';
 import {
@@ -38,26 +42,7 @@ import { TopBar } from './top-bar';
 import { LearningRail } from './learning-rail';
 import { Topography } from '@/components/Topography';
 
-interface RetryableSubmission {
-  fingerprint: string;
-  input: CanvasSubmissionInput;
-}
-
 type DrawerKind = 'assets' | 'studio' | 'progress' | 'sessions' | null;
-
-const AI_UNAVAILABLE_MESSAGE = 'AI 老师暂时无法连接，请稍后重试。';
-
-/* K12 页仍基于 lesson_sessions,通用产物入口(思维导图)待 /learn 并入统一界面后开放 */
-const LEARN_MENU_ACTIONS: readonly PlusMenuActionId[] = [
-  'upload_file',
-  'upload_image',
-  'create_demo',
-];
-
-/** 桌面协作态对话列的宽度百分比边界；保证对话永远可读、Canvas 永远可用。 */
-const CHAT_PCT_DEFAULT = 40;
-const CHAT_PCT_MIN = 28;
-const CHAT_PCT_MAX = 62;
 
 /**
  * K12 垂直学习页的大脑：持有布局状态机、可信判分提交状态与消息展示。
@@ -69,6 +54,7 @@ const CHAT_PCT_MAX = 62;
  */
 interface LearnWorkspaceProps {
   initialData: LearningPageDTO;
+  submitCanvas?: typeof submitCanvasAction;
   sessionActions?: {
     onNewSession?: () => void | Promise<void>;
     onResumeSession?: (sessionId: string) => void | Promise<void>;
@@ -78,24 +64,42 @@ interface LearnWorkspaceProps {
 /** A session switch remounts all session-local UI state on the same /learn URL. */
 export function LearnWorkspace(props: LearnWorkspaceProps) {
   return (
-    <LearnWorkspaceSession
-      key={props.initialData.currentSessionId ?? 'no-session'}
-      {...props}
-    />
+    <NotebookRequestScopeProvider
+      value={
+        props.initialData.conversationId
+          ? {
+              notebookId: props.initialData.notebookId,
+              conversationId: props.initialData.conversationId,
+            }
+          : null
+      }
+    >
+      <LearnWorkspaceSession
+        key={props.initialData.currentSessionId ?? 'no-session'}
+        {...props}
+      />
+    </NotebookRequestScopeProvider>
   );
 }
 
 function LearnWorkspaceSession({
   initialData,
   sessionActions,
+  submitCanvas = submitCanvasAction,
 }: LearnWorkspaceProps) {
-  const [progress, setProgress] = useState(initialData.progress);
-  const [feedback, setFeedback] = useState<CanvasFeedbackDTO | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isPending, startTransition] = useTransition();
-  const retryableSubmission = useRef<RetryableSubmission | null>(null);
-
-  const teachingTurn = useTeachingTurn(initialData.initialMessages);
+  const { progress, feedback, errorMessage, isPending, handleSubmit } =
+    useLearningCanvasSubmission(initialData.progress, submitCanvas);
+  const assetsEndpoint = initialData.conversationId
+    ? notebookScopedUrl('/api/v1/chat/assets', {
+        notebookId: initialData.notebookId,
+        conversationId: initialData.conversationId,
+      })
+    : '/api/v1/assets';
+  const teachingTurn = useTeachingTurn(
+    initialData.initialMessages,
+    initialData.notebookId,
+    initialData.conversationId,
+  );
   const sendTeachingTurn = teachingTurn.send;
   const messages = teachingTurn.messages;
   const {
@@ -145,7 +149,7 @@ function LearnWorkspaceSession({
 
   useEffect(() => {
     let active = true;
-    void loadAssets()
+    void loadAssets(assetsEndpoint)
       .then((loaded) => {
         if (active) setAssets(loaded);
       })
@@ -159,7 +163,7 @@ function LearnWorkspaceSession({
     return () => {
       active = false;
     };
-  }, []);
+  }, [assetsEndpoint]);
 
   const openCanvas = useCallback(() => {
     if (window.matchMedia('(max-width: 1023px)').matches) {
@@ -294,33 +298,6 @@ function LearnWorkspaceSession({
     [assets, setAssets, setChatError],
   );
 
-  const handleSubmit = useCallback((draft: CanvasSubmissionDraft) => {
-    const fingerprint = JSON.stringify(draft);
-    const previous = retryableSubmission.current;
-    const input =
-      previous?.fingerprint === fingerprint
-        ? previous.input
-        : createCanvasSubmissionInput(draft);
-
-    retryableSubmission.current = { fingerprint, input };
-    setErrorMessage(null);
-
-    startTransition(async () => {
-      try {
-        const result = await submitCanvasAction(input);
-        if (result.status === 'success') {
-          retryableSubmission.current = null;
-          setFeedback(result.feedback);
-          setProgress(result.progress);
-          return;
-        }
-        setErrorMessage(result.message);
-      } catch {
-        setErrorMessage('提交暂时失败，请检查网络后重试。');
-      }
-    });
-  }, []);
-
   /* 拖拽中缝调整对话/Canvas 比例；键盘用左右方向键微调 */
   const handleDividerPointerDown = useCallback(
     (event: React.PointerEvent<HTMLDivElement>) => {
@@ -363,7 +340,11 @@ function LearnWorkspaceSession({
   const liveTools = assistantToolSteps;
   const uploadLiveAsset = useCallback(
     async (file: File) => {
-      const asset = await uploadAsset({ file, scope: 'turn' });
+      const asset = await uploadAsset({
+        file,
+        scope: 'turn',
+        endpoint: assetsEndpoint,
+      });
       setAssets((current) => {
         const enabledCount = current.filter((item) => item.enabled).length;
         return [
@@ -375,7 +356,7 @@ function LearnWorkspaceSession({
         ];
       });
     },
-    [setAssets],
+    [assetsEndpoint, setAssets],
   );
   const artifactCompleted =
     feedback !== null && feedback.correctItems === feedback.attemptedItems;
@@ -391,6 +372,7 @@ function LearnWorkspaceSession({
     >
       <Topography />
       <TopBar
+        notebookId={initialData.notebookId}
         courseTitle={initialData.study.topic}
         stageLabel={null}
         masteryPercent={progress?.masteryPercent ?? null}
@@ -581,6 +563,7 @@ function LearnWorkspaceSession({
           onClose={() => setUploadKind(null)}
         >
           <AssetUploadPanel
+            endpoint={assetsEndpoint}
             kind={uploadKind}
             onUploaded={(asset) => {
               setAssets((current) => [

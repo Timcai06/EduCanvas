@@ -11,6 +11,19 @@ import { ArrowLeft, ArrowRight, CaretDown } from '@phosphor-icons/react';
 import gsap from 'gsap';
 import Link from 'next/link';
 import { useRef, useState, useTransition } from 'react';
+import {
+  AGE_BANDS,
+  GRADE_BANDS,
+  GRADE_LABELS,
+  DECLARATION_SOURCES,
+  EXPLANATION_ORDERS,
+  GUIDANCE_STYLES,
+  RESPONSE_DEPTHS,
+  MODALITIES,
+  FEEDBACK_STYLES,
+  optionLabel,
+  SelectField,
+} from './study-setup-options';
 import { TopBar } from '../workspace/learning/top-bar';
 import { OptionWheel } from './option-wheel';
 import { celebrate } from '@/features/celebrate/ink-splash';
@@ -22,91 +35,6 @@ import {
 
 gsap.registerPlugin(useGSAP);
 
-// 目标为空，让入口回到「先写一句想学什么」的对话式起点，而不是先面对一张表单。
-type Option = { value: string; label: string };
-
-// 选项集中定义，避免每个 <select> 各自散写 <option>；顺序即界面呈现顺序。
-const AGE_BANDS: Option[] = [
-  { value: 'under_13', label: '12 岁及以下' },
-  { value: '13_to_15', label: '13–15 岁' },
-  { value: '16_to_17', label: '16–17 岁' },
-  { value: 'adult', label: '成年人' },
-  { value: 'unknown', label: '暂不确定' },
-];
-const GRADE_BANDS: Option[] = [
-  { value: 'primary_low', label: '小学低年级' },
-  { value: 'primary_high', label: '小学高年级' },
-  { value: 'middle_school', label: '初中' },
-  { value: 'high_school', label: '高中' },
-];
-// 稳定的标签数组，供滚轮消费（避免每次渲染新建数组而重装动画）。
-const GRADE_LABELS = GRADE_BANDS.map((option) => option.label);
-const DECLARATION_SOURCES: Option[] = [
-  { value: 'self_declared', label: '学习者本人' },
-  { value: 'guardian_declared', label: '家长或监护人' },
-];
-const EXPLANATION_ORDERS: Option[] = [
-  { value: 'example_first', label: '先看例子' },
-  { value: 'concept_first', label: '先讲概念' },
-];
-const GUIDANCE_STYLES: Option[] = [
-  { value: 'step_by_step', label: '分步引导' },
-  { value: 'independent_first', label: '先独立尝试' },
-];
-const RESPONSE_DEPTHS: Option[] = [
-  { value: 'concise', label: '简洁要点' },
-  { value: 'balanced', label: '适中展开' },
-  { value: 'detailed', label: '详细讲解' },
-];
-const MODALITIES: Option[] = [
-  { value: 'mixed', label: '图文与练习结合' },
-  { value: 'visual', label: '多用图示' },
-  { value: 'text', label: '以文字为主' },
-  { value: 'practice', label: '以练习为主' },
-];
-const FEEDBACK_STYLES: Option[] = [
-  { value: 'gentle', label: '鼓励式反馈' },
-  { value: 'balanced', label: '鼓励与纠正并重' },
-  { value: 'direct', label: '直接指出问题' },
-];
-
-function optionLabel(options: Option[], value: string): string {
-  return options.find((option) => option.value === value)?.label ?? value;
-}
-
-function SelectField({
-  label,
-  value,
-  options,
-  onChange,
-  wide,
-}: {
-  label: string;
-  value: string;
-  options: Option[];
-  onChange: (value: string) => void;
-  wide?: boolean;
-}) {
-  return (
-    <label
-      className={`grid gap-2 text-sm font-medium ${wide ? 'sm:col-span-2' : ''}`}
-    >
-      {label}
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="min-h-11 rounded-xl border border-line bg-canvas px-3 outline-none focus:ring-2 focus:ring-accent"
-      >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
 /**
  * K12 学习入口只收集可验证声明；所有选项都可由学生或监护人重新修改。
  * 界面采用渐进披露：主项只有「想学会什么」，年龄与教学偏好收进可展开面板，
@@ -115,8 +43,12 @@ function SelectField({
  */
 export function StudySetup({
   courseOptions,
+  createAction = createStudyPlanAction,
+  notebookId,
 }: {
   courseOptions: readonly StudyCourseOptionDTO[];
+  createAction?: typeof createStudyPlanAction;
+  notebookId?: string;
 }) {
   const [input, setInput] = useState<CreateStudyPlanInputDTO>(() => ({
     ageBand: 'unknown',
@@ -166,7 +98,7 @@ export function StudySetup({
   const submit = () => {
     setError(null);
     startTransition(async () => {
-      const result: StudyActionResultDTO = await createStudyPlanAction(input);
+      const result: StudyActionResultDTO = await createAction(input);
       setError(result.message);
       // 计划创建成功即「落笔泼墨」庆祝一次（宿主在根布局，跨页面转场仍在）。
       if (!result.message) celebrate();
@@ -203,10 +135,16 @@ export function StudySetup({
 
   return (
     <main ref={rootRef} className="min-h-dvh bg-canvas text-ink">
-      <TopBar courseTitle="" stageLabel={null} masteryPercent={null} quiet />
+      <TopBar
+        notebookId={notebookId}
+        courseTitle=""
+        stageLabel={null}
+        masteryPercent={null}
+        quiet
+      />
       <div className="mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-2xl flex-col justify-center gap-8 px-5 py-10">
         <Link
-          href="/"
+          href={notebookId ? `/notebook/${notebookId}/plans` : '/'}
           className="unfold-item inline-flex items-center gap-1.5 text-sm text-ink-muted transition-colors hover:text-ink"
         >
           <ArrowLeft aria-hidden="true" size={16} />
@@ -214,7 +152,7 @@ export function StudySetup({
         </Link>
         <header className="unfold-item">
           <p className="mb-3 text-sm font-semibold tracking-wide text-accent-strong">
-            建立你的学习 Notebook
+            {notebookId ? '建立笔记本总学习目标' : '建立你的学习 Notebook'}
           </p>
           <h1 className="font-display text-3xl leading-tight font-semibold tracking-[-0.03em] text-balance sm:text-4xl">
             今天想学会什么？

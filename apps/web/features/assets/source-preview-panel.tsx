@@ -9,6 +9,7 @@ import type { AssetPreview } from './asset-preview-contract';
 import type { AssetItem } from './assets-drawer';
 import { DocxReadingSwitcher } from './docx-reading-switcher';
 import { PdfReadingSwitcher } from './pdf-reading-switcher';
+import { useNotebookRequestScope } from '@/features/workspace/general/notebook-request-scope';
 
 /**
  * 来源预览面板：PDF（pdf.js 翻页+缩放）、DOCX（mammoth HTML）、
@@ -29,6 +30,7 @@ export function SourcePreviewPanel({
   onClose: () => void;
   onDeleted: (assetId: string) => void;
 }) {
+  const requestContext = useNotebookRequestScope();
   const [preview, setPreview] = useState<AssetPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleteArmed, setDeleteArmed] = useState(false);
@@ -37,7 +39,7 @@ export function SourcePreviewPanel({
   useEffect(() => {
     if (!asset.selectable) return;
     let active = true;
-    void loadAssetPreview(asset.id)
+    void loadAssetPreview(asset.id, requestContext)
       .then((value) => {
         if (active) setPreview(value);
       })
@@ -51,7 +53,7 @@ export function SourcePreviewPanel({
     return () => {
       active = false;
     };
-  }, [asset.id, asset.selectable]);
+  }, [asset.id, asset.selectable, requestContext]);
 
   const remove = () => {
     if (!deleteArmed) {
@@ -60,7 +62,7 @@ export function SourcePreviewPanel({
     }
     setDeleting(true);
     setError(null);
-    void deleteAsset(asset.id)
+    void deleteAsset(asset.id, requestContext)
       .then(() => onDeleted(asset.id))
       .catch((reason: unknown) => {
         setError(reason instanceof Error ? reason.message : '删除失败。');

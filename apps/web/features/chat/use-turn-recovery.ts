@@ -1,4 +1,5 @@
 'use client';
+import { notebookScopedFetch } from '@/features/workspace/general/notebook-request-context';
 
 import { useCallback, type Dispatch, type RefObject } from 'react';
 import type { TeachingTurnAction } from './turn-state';
@@ -139,6 +140,8 @@ export function useTurnRecoveryRuntime(input: {
       current.recoveryAttempted = true;
       const controller = new TurnRecoveryController({
         eventsEndpoint,
+        fetchImpl: (url, init) =>
+          notebookScopedFetch(url, init, current.notebookRequestContext),
         onResearchSnapshot: restoreResearch,
       });
       const result = await controller.recover(

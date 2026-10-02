@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation';
 import { LearnWorkspace } from '@/features/workspace/learning/learn-workspace';
 import { StudyDiagnostic } from '@/features/study/study-diagnostic';
 import { StudySetup } from '@/features/study/study-setup';
@@ -21,6 +22,15 @@ export default async function LearnPage() {
   const identity = await readAnonymousIdentity();
   const state = await loadStudyPageState(identity);
 
+  if (identity && state.kind !== 'setup') {
+    const { loadOwnedStudyContext } =
+      await import('@/server/study/study-service');
+    const context =
+      state.kind === 'workspace'
+        ? state.context
+        : await loadOwnedStudyContext(identity);
+    if (context) redirect(`/notebook/${context.plan.goal.notebookId}/learn`);
+  }
   if (state.kind === 'setup') {
     return <StudySetup courseOptions={loadStudyCourseOptions()} />;
   }

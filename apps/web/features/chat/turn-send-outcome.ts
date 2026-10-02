@@ -3,6 +3,9 @@ export type AgentTurnSendOutcome =
   'completed' | 'failed' | 'cancelled' | 'interrupted' | 'rejected';
 
 export interface InFlightTurn {
+  notebookRequestContext?:
+    | import('@/features/workspace/general/notebook-request-context').NotebookRequestContext
+    | null;
   clientMessageId: string;
   controller: AbortController;
   turnId: string | null;

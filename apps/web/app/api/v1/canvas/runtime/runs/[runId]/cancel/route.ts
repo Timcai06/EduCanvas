@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
-import { loadOwnedGeneralConversation } from '@/server/platform/general-conversation';
+import {
+  loadOwnedNotebookResourceRequestConversation as loadOwnedGeneralConversation,
+  hasGeneralRequestContext,
+} from '@/server/platform/general-request-conversation-context';
 import {
   isTrustedSameOriginWrite,
   jsonError,
@@ -26,10 +29,13 @@ export async function POST(
   const params = paramsSchema.safeParse(await context.params);
   const identity = await readAnonymousIdentity();
   const conversation = identity
-    ? await loadOwnedGeneralConversation(identity)
+    ? await loadOwnedGeneralConversation(identity, request)
     : null;
   if (!identity || !conversation) {
-    return jsonError(401, 'unauthorized');
+    return jsonError(
+      identity && hasGeneralRequestContext(request) ? 404 : 401,
+      'unauthorized',
+    );
   }
   if (!params.success) {
     return jsonError(404, 'resource_not_found');

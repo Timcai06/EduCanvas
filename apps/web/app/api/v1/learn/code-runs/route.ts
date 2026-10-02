@@ -1,3 +1,5 @@
+import { readTeachingRequestScope } from '@/server/teaching/request-scope';
+import { TurnRequestValidationError } from '@/server/http/turn-request';
 import { readAnonymousIdentity } from '@/server/identity/anonymous-identity';
 import {
   JsonRequestValidationError,
@@ -9,7 +11,10 @@ import {
   jsonError,
   jsonResponse,
 } from '@/server/http/request-security';
-import { loadOwnedStudyContext } from '@/server/study/study-service';
+import {
+  loadOwnedStudyContext,
+  loadOwnedStudyContextForNotebook,
+} from '@/server/study/study-service';
 import { runCodeExercise } from '@/server/teaching/code-exercise-runner';
 import {
   codeRunTrafficKey,
@@ -33,7 +38,21 @@ export async function POST(request: Request): Promise<Response> {
 
   const identity = await readAnonymousIdentity();
   if (!identity) return jsonError(401, 'unauthorized');
-  const context = await loadOwnedStudyContext(identity);
+  let context;
+  try {
+    const scope = readTeachingRequestScope(request);
+    context = scope
+      ? await loadOwnedStudyContextForNotebook(
+          identity,
+          scope.notebookId,
+          scope.conversationId,
+        )
+      : await loadOwnedStudyContext(identity);
+  } catch (error) {
+    if (error instanceof TurnRequestValidationError)
+      return jsonError(400, error.code);
+    return jsonError(404, 'code_exercise_not_found');
+  }
   if (!context) return jsonError(401, 'unauthorized');
 
   let body: unknown;

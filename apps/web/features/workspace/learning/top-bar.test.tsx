@@ -3,6 +3,17 @@ import { describe, expect, it } from 'vitest';
 import { TopBar } from './top-bar';
 
 describe('Learning TopBar', () => {
+  it('显式课程返回所属Notebook的计划页', () => {
+    const html = renderToStaticMarkup(
+      <TopBar
+        notebookId="notebook-a"
+        courseTitle="课程"
+        stageLabel={null}
+        masteryPercent={null}
+      />,
+    );
+    expect(html).toContain('href="/notebook/notebook-a/plans"');
+  });
   it('quiet 与课程状态都保留明确的返回笔记本入口', () => {
     const html = renderToStaticMarkup(
       <TopBar courseTitle="" stageLabel={null} masteryPercent={null} quiet />,

@@ -22,7 +22,7 @@ const renameConversationSchema = z
   })
   .strict();
 
-/** 重命名当前主体拥有的 Notebook；标题写入 Space 与主 Conversation 的同一事务。 */
+/** 重命名当前主体可管理的 Conversation；Notebook 标题使用独立接口。 */
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ conversationId: string }> },
@@ -55,7 +55,7 @@ export async function PATCH(
   });
 }
 
-/** 归档当前主体拥有的历史 Notebook；当前游标只切换到同主体的下一条记录。 */
+/** 归档当前主体可管理的 Conversation；当前游标只切换到同主体的下一条记录。 */
 export async function DELETE(
   request: Request,
   context: { params: Promise<{ conversationId: string }> },

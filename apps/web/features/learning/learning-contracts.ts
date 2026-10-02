@@ -24,8 +24,10 @@ export interface ProgressDTO {
 
 /** Server Component 加载后传入客户端工作区的最小公开数据。 */
 export interface LearningPageDTO {
+  goalId?: string;
   /** 当前教学 Turn 所属 Notebook；仅用于受认证语音 ticket 绑定。 */
   notebookId: string;
+  conversationId?: string;
   artifact: PublicArtifact;
   progress: ProgressDTO | null;
   study: StudyProgressDTO;
@@ -67,6 +69,8 @@ export interface StudyProgressDTO {
 
 /** 初始诊断题面只含版本、题目和选项，内部 objective 映射与答案都留在服务端。 */
 export interface StudyDiagnosticDTO {
+  sessionId?: string;
+  goalId?: string;
   topic: string;
   desiredOutcome: string;
   diagnostic: PublicDiagnostic;

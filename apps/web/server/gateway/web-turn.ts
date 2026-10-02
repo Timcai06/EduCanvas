@@ -29,7 +29,7 @@ import {
   prepareGatewayGeneralTurnContext,
 } from '../platform/general-turn';
 import { webResearchCheckpoints } from '../platform/general-turn-persistence';
-import { loadOwnedGeneralConversation } from '../platform/general-conversation';
+import { loadOwnedGeneralRequestConversation } from '../platform/general-request-conversation-context';
 import { gatewayToLegacy } from './turn-application-projection';
 
 const identities = new DrizzleGatewayIdentityRepository();
@@ -100,18 +100,22 @@ class WebCompatibilityRunner implements GatewayTurnRunnerPort {
 export async function beginWebGatewayTurn(
   identity: AnonymousIdentity,
   request: TeachingTurnRequestBody,
+  httpRequest?: Request,
 ): Promise<{
   events: AsyncIterable<TeachingTurnEvent>;
   cancel: () => Promise<void>;
 }> {
+  const conversation = await loadOwnedGeneralRequestConversation(
+    identity,
+    httpRequest,
+  );
+  if (!conversation || conversation.agentProfileId !== 'general') {
+    throw new PlatformTurnOwnershipError();
+  }
   if (request.mode === 'deep_research' && !isWebSearchConfigured()) {
     throw Object.assign(new Error('deep_research_unavailable'), {
       code: 'deep_research_unavailable' as const,
     });
-  }
-  const conversation = await loadOwnedGeneralConversation(identity);
-  if (!conversation || conversation.agentProfileId !== 'general') {
-    throw new PlatformTurnOwnershipError();
   }
   const modelRuntime = resolveTurnModelRuntime();
   const assetContext = await prepareGatewayGeneralTurnContext({
@@ -219,11 +223,13 @@ export async function beginWebGatewayTurn(
  */
 export async function resumeWebGatewayTurn(
   identity: AnonymousIdentity,
-  input: { turnId: string; afterSequence: number },
+  input: { turnId: string; afterSequence: number; conversationId?: string },
 ): Promise<readonly GatewayOperationEvent[]> {
   return operations.listEvents(
     input.turnId,
     input.afterSequence,
     identity.studentId,
+    undefined,
+    input.conversationId,
   );
 }

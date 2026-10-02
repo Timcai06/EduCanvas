@@ -113,9 +113,11 @@ const publicMessages: Record<string, string> = {
 /** 仅返回learning-contracts公开DTO；内部事件、身份、判分键和异常不会序列化到浏览器。 */
 export async function submitCanvasAction(
   input: CanvasSubmissionInput,
+  notebookId?: string,
+  expectedContext?: { sessionId: string; goalId: string },
 ): Promise<SubmitCanvasResultDTO> {
   try {
-    const result = await submitOwnedCanvas(input);
+    const result = await submitOwnedCanvas(input, notebookId, expectedContext);
     if (!result.authenticated) {
       return { status: 'unauthorized', message: '请先开始学习。' };
     }

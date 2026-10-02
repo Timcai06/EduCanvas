@@ -1,5 +1,7 @@
 'use client';
 
+import { notebookScopedFetch } from '@/features/workspace/general/notebook-request-context';
+
 import { canvasResourceKindSchema } from '@educanvas/canvas-protocol';
 import { z } from 'zod';
 
@@ -90,7 +92,7 @@ export async function fetchSurfacePositions(
   do {
     let response: Response;
     try {
-      response = await fetch(surfaceLayoutUrl(cursor), {
+      response = await notebookScopedFetch(surfaceLayoutUrl(cursor), {
         credentials: 'same-origin',
         cache: 'no-store',
         signal,
@@ -137,7 +139,7 @@ export async function saveSurfacePosition(
 ): Promise<SurfacePosition> {
   let response: Response;
   try {
-    response = await fetch('/api/v1/canvas/surface-layout', {
+    response = await notebookScopedFetch('/api/v1/canvas/surface-layout', {
       method: 'PUT',
       credentials: 'same-origin',
       headers: { 'content-type': 'application/json' },

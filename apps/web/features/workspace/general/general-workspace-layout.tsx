@@ -73,6 +73,7 @@ export function GeneralWorkspaceLayout({
       <GeneralWorkspaceHeader
         notebookTitle={notebookTitle}
         conversationId={conversationId}
+        notebookId={notebookId}
         sidebarOpen={sidebarOpen}
         studioOpen={surface.type === 'studio'}
         onToggleSidebar={onToggleSidebar}
@@ -84,6 +85,7 @@ export function GeneralWorkspaceLayout({
           open={sidebarOpen}
           onClose={onToggleSidebar}
           activeConversationId={conversationId}
+          notebookId={notebookId}
           onNewNotebook={() => void startNewGeneralChatAction()}
         />
         {/* isolate 堆叠上下文会困住内部 z-40 的 modal，压不过兄弟 header 的 z-20：main 抬到 z-30（同落地态，见组合层全屏 Canvas 注释）。 */}
