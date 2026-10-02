@@ -17,6 +17,7 @@ import {
   type PlatformArtifact,
   type PlatformArtifactJob,
 } from '@educanvas/db';
+import { DrizzleArtifactConfirmationRepository } from '@educanvas/db';
 import { z } from 'zod';
 import type { AnonymousIdentity } from '../identity/anonymous-identity';
 import {
@@ -162,6 +163,10 @@ export function collectArtifactInputSourceReferences(input: {
  */
 export class WebOperationArtifacts {
   private readonly proposed = new Map<string, TurnApplicationProfileEvent>();
+  private confirmationProposal: {
+    kind: z.infer<typeof artifactProposalKindSchema>;
+    title: string;
+  } | null = null;
 
   constructor(
     private readonly input: {
@@ -223,6 +228,81 @@ export class WebOperationArtifacts {
         return toCanvasArtifactStatusOutput(toolInput.artifactId, receipt);
       },
     };
+  }
+
+  /** Model-only semantic proposal. It keeps only a bounded candidate in memory;
+   * durable state is written later by finalize, after the whole Turn succeeds. */
+  requestConfirmationTool(): AgentTool<
+    { kind: z.infer<typeof artifactProposalKindSchema>; title: string },
+    {
+      kind: z.infer<typeof artifactProposalKindSchema>;
+      title: string;
+      status: 'awaiting_confirmation';
+    }
+  > {
+    const inputSchema = z
+      .object({
+        kind: artifactProposalKindSchema,
+        title: z.string().trim().min(1).max(120),
+      })
+      .strict();
+    const outputSchema = z
+      .object({
+        kind: artifactProposalKindSchema,
+        title: z.string().trim().min(1).max(120),
+        status: z.literal('awaiting_confirmation'),
+      })
+      .strict();
+    return {
+      name: 'proposeCanvasArtifact',
+      description:
+        '为用户明确要求的持久 Canvas 产物提出一个建议类型和标题；此工具不会创建 Artifact、Generation Job 或后台任务。普通聊天、解释、摘要、草稿和没有明确持久化要求的请求不要调用。',
+      inputSchema,
+      outputSchema,
+      timeoutMs: 2_000,
+      handler: async (input, context) => {
+        if (
+          context.subjectId !== this.input.identity.studentId ||
+          context.conversationId !== this.input.conversationId
+        )
+          throw new Error('canvas_artifact_scope_mismatch');
+        this.confirmationProposal = { kind: input.kind, title: input.title };
+        return {
+          ...this.confirmationProposal,
+          status: 'awaiting_confirmation',
+        };
+      },
+    };
+  }
+
+  async finalizeConfirmation(input: {
+    userMessageId: string;
+    actorUserId: string;
+  }): Promise<TurnApplicationProfileEvent | null> {
+    const proposal = this.confirmationProposal;
+    if (!proposal) return null;
+    const pending =
+      await new DrizzleArtifactConfirmationRepository().createPending({
+        operationId: this.input.operationId,
+        userMessageId: input.userMessageId,
+        actorUserId: input.actorUserId,
+        notebookId: this.input.spaceId,
+        conversationId: this.input.conversationId,
+        artifactKind: proposal.kind,
+        title: proposal.title,
+      });
+    return {
+      protocol: 'educanvas.turn.v2',
+      operationId: this.input.operationId,
+      type: 'artifact.confirmation_required',
+      confirmationId: pending.id,
+      artifactKind: pending.artifactKind,
+      title: pending.title,
+    };
+  }
+
+  confirmationProposalSnapshot() {
+    return this.confirmationProposal ? { ...this.confirmationProposal } : null;
   }
 
   events(): readonly TurnApplicationProfileEvent[] {

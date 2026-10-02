@@ -1,3 +1,11 @@
+import {
+  isKnownTeachingTurnEvent,
+  parseArtifactConfirmationEvent,
+  TurnStreamProtocolError,
+  type ArtifactConfirmationRequiredEvent,
+} from './artifact-confirmation-turn-event';
+export { TurnStreamProtocolError } from './artifact-confirmation-turn-event';
+
 const TURN_EVENT_SCHEMA_VERSION = '1' as const;
 const MAX_ID_LENGTH = 256;
 const MAX_CODE_LENGTH = 128;
@@ -120,6 +128,7 @@ export type ArtifactLifecycleEvent =
 
 export type TeachingTurnEvent =
   | ArtifactLifecycleEvent
+  | ArtifactConfirmationRequiredEvent
   | TurnAcceptedEvent
   | MessageDeltaEvent
   | MessageCitationEvent
@@ -127,13 +136,6 @@ export type TeachingTurnEvent =
   | TurnFailedEvent
   | TurnCancelledEvent
   | ToolLifecycleEvent;
-
-export class TurnStreamProtocolError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'TurnStreamProtocolError';
-  }
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -216,23 +218,7 @@ function parseTeachingTurnEventWithoutSequence(
   eventName: string,
   jsonData: string,
 ): TeachingTurnEvent | null {
-  const knownEvents = new Set([
-    'turn.accepted',
-    'message.delta',
-    'message.citation',
-    'turn.completed',
-    'turn.failed',
-    'turn.cancelled',
-    'tool.started',
-    'tool.completed',
-    'tool.failed',
-    'artifact.proposed',
-    'artifact.created',
-    'artifact.version_added',
-    'artifact.generation_progress',
-    'artifact.failed',
-  ]);
-  if (!knownEvents.has(eventName)) return null;
+  if (!isKnownTeachingTurnEvent(eventName)) return null;
 
   let parsed: unknown;
   try {
@@ -252,6 +238,9 @@ function parseTeachingTurnEventWithoutSequence(
     throw new TurnStreamProtocolError(
       `${eventName} payload type does not match`,
     );
+  }
+  if (eventName === 'artifact.confirmation_required') {
+    return parseArtifactConfirmationEvent(parsed);
   }
 
   const turnId = readString(parsed, 'turnId', eventName);

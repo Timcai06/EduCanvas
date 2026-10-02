@@ -141,6 +141,14 @@ export function projectTurnApplicationEventToWeb(
         trustTier: event.trustTier,
         title: event.title,
       };
+    case 'artifact.confirmation_required':
+      return {
+        ...base,
+        type: 'artifact.confirmation_required',
+        confirmationId: event.confirmationId,
+        kind: event.artifactKind,
+        title: event.title,
+      };
     case 'artifact.version_added':
       return {
         ...base,
@@ -289,6 +297,15 @@ export async function* gatewayToLegacy(
           artifactId: event.artifactId,
           kind: event.artifactKind,
           trustTier: 'tier1',
+          title: event.title,
+        };
+        break;
+      case 'artifact.confirmation_required':
+        yield {
+          ...base,
+          type: 'artifact.confirmation_required',
+          confirmationId: event.confirmationId,
+          kind: event.artifactKind,
           title: event.title,
         };
         break;

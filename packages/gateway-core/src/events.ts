@@ -31,6 +31,7 @@ import {
   gatewayApprovalRequestSchema,
 } from './capabilities';
 import { gatewayCitationSchema } from './citations';
+import { artifactProposalKindSchema } from '@educanvas/agent-core';
 
 export const gatewayFailureCodes = [
   'INVALID_REQUEST',
@@ -134,6 +135,15 @@ export const gatewayOperationEventSchema = z.discriminatedUnion('type', [
       artifactId: gatewayOpaqueIdSchema,
       artifactKind: gatewayOpaqueIdSchema,
       title: z.string().trim().min(1).max(300),
+    })
+    .strict(),
+  z
+    .object({
+      ...eventBase,
+      type: z.literal('artifact.confirmation_required'),
+      confirmationId: gatewayOpaqueIdSchema,
+      artifactKind: artifactProposalKindSchema,
+      title: z.string().trim().min(1).max(120),
     })
     .strict(),
   z

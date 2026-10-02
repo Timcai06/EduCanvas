@@ -19,6 +19,9 @@ vi.mock('@educanvas/db', () => ({
   DrizzlePlatformArtifactTurnReferenceRepository: class {
     listForOperations = mocks.listReferences;
   },
+  DrizzleArtifactConfirmationRepository: class {
+    listPending = vi.fn().mockResolvedValue([]);
+  },
 }));
 vi.mock('next/headers', () => ({ cookies: vi.fn() }));
 vi.mock('@/server/identity/anonymous-identity', () => ({

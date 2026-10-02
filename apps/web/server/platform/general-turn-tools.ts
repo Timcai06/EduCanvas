@@ -151,6 +151,8 @@ export function createGeneralToolKernel(
   operationImages: WebOperationImageArtifacts,
   options: {
     deepResearch?: boolean;
+    allowArtifactWrites?: boolean;
+    allowArtifactConfirmation?: boolean;
     researchCheckpoint?: ResearchCheckpointSnapshot;
     researchScope?: {
       operationId: string;
@@ -212,11 +214,24 @@ export function createGeneralToolKernel(
       effect: 'read',
       modelInputSchema: planNoteModelInputSchema,
     }),
-    adaptAgentTool(operationArtifacts.createTool(), {
-      capability: 'artifact.create',
-      risk: 'l1',
-      effect: 'write',
-    }),
+    ...(options.allowArtifactWrites
+      ? [
+          adaptAgentTool(operationArtifacts.createTool(), {
+            capability: 'artifact.create',
+            risk: 'l1',
+            effect: 'write',
+          }),
+        ]
+      : []),
+    ...(options.allowArtifactConfirmation
+      ? [
+          adaptAgentTool(operationArtifacts.requestConfirmationTool(), {
+            capability: 'artifact.confirmation.propose',
+            risk: 'l0',
+            effect: 'read',
+          }),
+        ]
+      : []),
     ...(!options.deepResearch
       ? [
           adaptAgentTool(operationArtifacts.getStatusTool(), {

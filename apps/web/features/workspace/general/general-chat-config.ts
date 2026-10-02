@@ -10,6 +10,7 @@ export const GENERAL_TURN_OPTIONS: AgentTurnClientOptions = {
     `/api/v1/chat/turn/${encodeURIComponent(turnId)}/cancel`,
   eventsEndpoint: (turnId) =>
     `/api/v1/chat/turn/${encodeURIComponent(turnId)}/events`,
+  supportsArtifactConfirmation: true,
 };
 
 export const GENERAL_MENU_ACTIONS: readonly PlusMenuActionId[] = [

@@ -22,6 +22,7 @@ export const gatewayCapabilityNames = [
   'output.action',
   'output.stream',
   'artifact.native',
+  'artifact.confirmation',
   'education.student_state.read',
   'education.knowledge.retrieve',
   'approval.interactive',

@@ -6,11 +6,15 @@ import {
 } from '@/features/workspace/general/notebook-request-context';
 
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import type { AgentAssetPart, AgentMessagePart } from '@educanvas/agent-core';
 import type {
-  AgentAssetPart,
-  AgentMessagePart,
-  OutputPreference,
-} from '@educanvas/agent-core';
+  AgentTurnClientOptions,
+  AgentTurnSendOptions,
+} from './turn-client-types';
+export type {
+  AgentTurnClientOptions,
+  AgentTurnSendOptions,
+} from './turn-client-types';
 import type { InitialChatMessageDTO, MessageArtifactDTO } from './messages';
 import {
   createTeachingTurnState,
@@ -31,13 +35,6 @@ function isBrowserOnline(): boolean {
   return typeof navigator === 'undefined' ? true : navigator.onLine;
 }
 
-export interface AgentTurnClientOptions {
-  endpoint: string;
-  assistantLabel: string;
-  cancelEndpoint?: (turnId: string) => string;
-  eventsEndpoint?: (turnId: string) => string;
-}
-
 export interface AgentTurnClientCallbacks {
   onArtifactProposed?: (
     event: Extract<
@@ -45,13 +42,6 @@ export interface AgentTurnClientCallbacks {
       { type: 'artifact.proposed' | 'artifact.created' }
     >,
   ) => void;
-}
-
-export interface AgentTurnSendOptions {
-  /** 非可信的呈现偏好；服务端仍独立决定工具授权与输出能力。 */
-  outputPreference?: OutputPreference;
-  /** 非可信的本轮意图；服务端据此选择既有 Agent Loop 的受限 Profile。 */
-  mode?: 'chat' | 'deep_research';
 }
 
 export function useAgentTurn(
@@ -235,6 +225,12 @@ export function useAgentTurn(
               ...(sendOptions.mode === 'deep_research'
                 ? { mode: sendOptions.mode }
                 : {}),
+              ...(options.supportsArtifactConfirmation
+                ? { supportsArtifactConfirmation: true }
+                : {}),
+              ...(sendOptions.artifactConfirmationId
+                ? { artifactConfirmationId: sendOptions.artifactConfirmationId }
+                : {}),
             }),
             signal: current.controller.signal,
           },
@@ -348,6 +344,7 @@ export function useAgentTurn(
       recoverTurn,
       options.assistantLabel,
       options.endpoint,
+      options.supportsArtifactConfirmation,
       safeConnectionError,
     ],
   );

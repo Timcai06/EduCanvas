@@ -37,6 +37,8 @@ export interface TeachingTurnRequestBody {
    * `canvas` 为旧别名，服务端已归一化为 `interactive_artifact`。
    */
   outputPreference?: OutputPreference;
+  supportsArtifactConfirmation?: boolean;
+  artifactConfirmationId?: string;
   /** Workflow selection only; capability grants remain server-owned. */
   mode?: TurnMode;
 }
@@ -120,6 +122,31 @@ export async function parseTeachingTurnRequest(
   if (outputPreference === null) {
     throw new TurnRequestValidationError('invalid_request');
   }
+  if (
+    record.supportsArtifactConfirmation !== undefined &&
+    typeof record.supportsArtifactConfirmation !== 'boolean'
+  ) {
+    throw new TurnRequestValidationError('invalid_request');
+  }
+  const artifactConfirmationId =
+    record.artifactConfirmationId === undefined
+      ? undefined
+      : typeof record.artifactConfirmationId === 'string' &&
+          CLIENT_MESSAGE_ID.test(record.artifactConfirmationId)
+        ? record.artifactConfirmationId
+        : null;
+  if (
+    record.artifactConfirmationId !== undefined &&
+    artifactConfirmationId === null
+  ) {
+    throw new TurnRequestValidationError('invalid_request');
+  }
+  if (
+    artifactConfirmationId !== undefined &&
+    record.supportsArtifactConfirmation !== true
+  ) {
+    throw new TurnRequestValidationError('invalid_request');
+  }
   const mode =
     record.mode === undefined || record.mode === 'chat'
       ? undefined
@@ -130,7 +157,13 @@ export async function parseTeachingTurnRequest(
     throw new TurnRequestValidationError('invalid_request');
   }
   const keys = Object.keys(record)
-    .filter((key) => key !== 'outputPreference' && key !== 'mode')
+    .filter(
+      (key) =>
+        key !== 'outputPreference' &&
+        key !== 'mode' &&
+        key !== 'supportsArtifactConfirmation' &&
+        key !== 'artifactConfirmationId',
+    )
     .sort()
     .join(',');
   const candidate =
@@ -159,6 +192,10 @@ export async function parseTeachingTurnRequest(
     text,
     parts,
     ...(outputPreference ? { outputPreference } : {}),
+    ...(record.supportsArtifactConfirmation === true
+      ? { supportsArtifactConfirmation: true }
+      : {}),
+    ...(artifactConfirmationId ? { artifactConfirmationId } : {}),
     ...(mode ? { mode } : {}),
   };
 }

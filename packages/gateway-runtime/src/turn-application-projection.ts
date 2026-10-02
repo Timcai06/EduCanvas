@@ -107,6 +107,13 @@ export function projectTurnApplicationEventToGateway(
         artifactKind: event.artifactKind,
         title: event.title,
       };
+    case 'artifact.confirmation_required':
+      return {
+        type: 'artifact.confirmation_required',
+        confirmationId: event.confirmationId,
+        artifactKind: event.artifactKind,
+        title: event.title,
+      };
     case 'artifact.version_added':
       return {
         type: 'artifact.version_added',

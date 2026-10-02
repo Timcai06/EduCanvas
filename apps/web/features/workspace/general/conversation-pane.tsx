@@ -20,6 +20,7 @@ import type { AssetItem } from '@/features/assets/assets-drawer';
 import type { LiveVoiceContextSnapshot } from '@/features/voice/live-voice-context';
 import type { LiveVoiceExitPayload } from '@/features/voice/live-voice-bring-back';
 import type { OutputPreference } from '@educanvas/agent-core';
+import type { ArtifactProposalKind } from '@educanvas/agent-core';
 
 /**
  * 消息与 Composer（W02）。
@@ -64,6 +65,11 @@ export interface ConversationPaneProps {
   onUploadLiveAsset: (file: File, kind: 'image' | 'document') => Promise<void>;
   onOpenStatusCard: (artifactId: string) => void;
   onDismissStatusCard: () => void;
+  onArtifactConfirmation?: (input: {
+    confirmationId: string;
+    kind: ArtifactProposalKind;
+    clientMessageId: string;
+  }) => Promise<void> | void;
   /** Live 出室瞬间回调（EXIT 时同步触发）：信笺等带回写库与退场动画并行。 */
   onLiveExit?: (payload: LiveVoiceExitPayload) => void;
 }
@@ -147,6 +153,7 @@ export function ConversationPane({
   onUploadLiveAsset,
   onOpenStatusCard,
   onDismissStatusCard,
+  onArtifactConfirmation,
   onLiveExit,
 }: ConversationPaneProps) {
   const generationHasMessageCard = Boolean(
@@ -294,6 +301,7 @@ export function ConversationPane({
           onPreviewHtml={({ source }) => onPreviewHtml(source)}
           onOpenArtifact={onOpenArtifact}
           onOpenSource={onOpenSource}
+          {...(onArtifactConfirmation ? { onArtifactConfirmation } : {})}
           assistantLabel="AI"
         />
         {showStatusCard ? (

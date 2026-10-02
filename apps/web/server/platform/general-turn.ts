@@ -48,6 +48,7 @@ export async function beginGatewayGeneralTurnApplication(input: {
   signal: ModelAbortSignal;
   transportCapabilities: readonly string[];
   modelRuntime: ResolvedTurnModelRuntime | null;
+  confirmedArtifactKind?: import('@educanvas/agent-core').ArtifactProposalKind;
 }): Promise<{ events: AsyncIterable<TurnApplicationEvent> }> {
   if (input.route.actorUserId !== input.identity.studentId) {
     throw new Error('web_general_actor_scope_mismatch');
@@ -120,6 +121,13 @@ export async function beginGatewayGeneralTurnApplication(input: {
     operationImages,
     {
       deepResearch: input.request.mode === 'deep_research',
+      allowArtifactWrites:
+        (input.request.outputPreference ?? 'auto') !== 'auto' &&
+        input.request.artifactConfirmationId === undefined,
+      allowArtifactConfirmation:
+        (input.request.outputPreference ?? 'auto') === 'auto' &&
+        input.request.supportsArtifactConfirmation === true &&
+        input.request.mode !== 'deep_research',
       ...(researchCheckpoint ? { researchCheckpoint } : {}),
       ...(researchScope ? { researchScope } : {}),
     },
@@ -147,6 +155,10 @@ export async function beginGatewayGeneralTurnApplication(input: {
       tools.nodeInvocations,
       input.route.membershipRole,
       tools.searchProgress,
+      input.request.supportsArtifactConfirmation === true &&
+        (input.request.outputPreference ?? 'auto') === 'auto' &&
+        input.request.mode !== 'deep_research',
+      input.confirmedArtifactKind ?? null,
     ),
     contextLedger: ledgers.contextLedger,
     modelRunLedger: ledgers.modelRunLedger,

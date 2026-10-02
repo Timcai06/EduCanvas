@@ -43,6 +43,7 @@ export type TurnApplicationProfileEvent = Extract<
     type:
       | 'message.citation'
       | 'artifact.proposed'
+      | 'artifact.confirmation_required'
       | 'artifact.version_added'
       | 'artifact.generation_progress'
       | 'artifact.failed';

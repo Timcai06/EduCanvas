@@ -51,6 +51,7 @@ export function hydrateChatMessages(
       attachments: [],
       citations: message.citations ?? [],
       artifacts: message.artifacts ?? [],
+      artifactConfirmation: message.artifactConfirmation,
       failureCode: message.failureCode,
       retryText: studentInputByTurn.get(message.turnId)?.content,
       retryParts: studentInputByTurn.get(message.turnId)?.parts,

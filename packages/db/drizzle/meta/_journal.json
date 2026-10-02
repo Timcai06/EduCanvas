@@ -456,6 +456,13 @@
       "when": 1790951406658,
       "tag": "0064_artifact_generation_execution_fence",
       "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1790954426569,
+      "tag": "0065_artifact_confirmations",
+      "breakpoints": true
     }
   ]
 }

@@ -5,6 +5,7 @@ import {
   DrizzlePlatformArtifactTurnReferenceRepository,
   DrizzlePlatformSourceRepository,
   DrizzlePlatformTurnRepository,
+  DrizzleArtifactConfirmationRepository,
   type PlatformConversationSnapshot,
 } from '@educanvas/db';
 import { cookies } from 'next/headers';
@@ -25,6 +26,7 @@ const conversations = new DrizzlePlatformConversationRepository();
 const turns = new DrizzlePlatformTurnRepository();
 const sources = new DrizzlePlatformSourceRepository();
 const artifactReferences = new DrizzlePlatformArtifactTurnReferenceRepository();
+const artifactConfirmations = new DrizzleArtifactConfirmationRepository();
 
 export interface GeneralChatPageData {
   conversation: PlatformConversationSnapshot;
@@ -136,6 +138,17 @@ export async function loadGeneralChatPageData(explicit?: {
     trustedSubjectId: identity.studentId,
     operationIds: messages.map((message) => message.operationId),
   });
+  const pendingConfirmations = await artifactConfirmations.listPending({
+    actorUserId: identity.studentId,
+    notebookId: conversation.spaceId,
+    conversationId: conversation.id,
+  });
+  const confirmationsByOperation = new Map(
+    pendingConfirmations.map((confirmation) => [
+      confirmation.operationId,
+      confirmation,
+    ]),
+  );
   const artifactsByOperation = new Map<
     string,
     (typeof referencedArtifacts)[number][]
@@ -179,6 +192,21 @@ export async function loadGeneralChatPageData(explicit?: {
                 latestVersion: artifact.latestVersion,
               }),
             )
+          : undefined,
+      artifactConfirmation:
+        message.role === 'assistant'
+          ? (() => {
+              const confirmation = confirmationsByOperation.get(
+                message.operationId,
+              );
+              return confirmation
+                ? {
+                    id: confirmation.id,
+                    kind: confirmation.artifactKind,
+                    title: confirmation.title,
+                  }
+                : undefined;
+            })()
           : undefined,
       citations:
         message.role === 'assistant'

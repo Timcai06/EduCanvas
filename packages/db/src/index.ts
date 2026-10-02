@@ -22,6 +22,13 @@ export {
   toolApprovalIntents,
 } from './schema';
 export {
+  ArtifactConfirmationNotFoundError,
+  DrizzleArtifactConfirmationRepository,
+  artifactConfirmationMessageId,
+  type ArtifactConfirmationScope,
+  type ArtifactConfirmationSnapshot,
+} from './artifact-confirmation-repository';
+export {
   AssetAccessError,
   AssetPersistenceError,
   ASSET_EXTRACT_TEXT_TASK,

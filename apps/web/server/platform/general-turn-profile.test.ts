@@ -291,6 +291,7 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
     const profile = createProfile({
       operationArtifacts: {
         events: () => [event],
+        finalizeConfirmation: vi.fn().mockResolvedValue(null),
       } as unknown as WebOperationArtifacts,
     });
 
@@ -313,13 +314,12 @@ describe('WebGeneralProfile trusted Tool Policy', () => {
     const interactiveSystemPrompt =
       interactive.context.profile[0]?.message.content ?? '';
 
-    expect(interactiveSystemPrompt).toContain('思维导图');
     expect(interactiveSystemPrompt).toContain('Canvas');
     expect(interactive.toolPolicy).toEqual(normal.toolPolicy);
   });
 
   it.each([
-    ['auto', '自然语言回答'],
+    ['auto', '不支持产物确认卡片'],
     ['markdown_document', 'Markdown 文档'],
     ['interactive_artifact', '可在 Canvas'],
     ['web_app', 'web_app'],
