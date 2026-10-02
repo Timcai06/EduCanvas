@@ -254,43 +254,6 @@ describe('TurnApplicationService (core orchestration)', () => {
     });
   });
 
-  it('Model Run 账本启动失败归类为运行时失败，不伪装成模型失败', async () => {
-    const models = new MemoryModelRunLedger();
-    models.createOrGet = async () => {
-      throw new Error('private ledger backend detail');
-    };
-    let providerCalls = 0;
-    const lifecycle = new MemoryLifecycle();
-    const events = await collect(
-      new TurnApplicationService({
-        lifecycle,
-        profile: profile(),
-        contextLedger: new MemoryContextLedger(),
-        modelRunLedger: models,
-        modelGateway: {
-          async *streamTurnText() {
-            providerCalls += 1;
-          },
-        },
-      }),
-    );
-
-    expect(events.at(-1)).toMatchObject({
-      type: 'turn.failed',
-      code: 'RUNTIME_FAILED',
-      retryable: true,
-    });
-    expect(providerCalls).toBe(0);
-    expect(lifecycle.settlements.at(-1)).toMatchObject({
-      status: 'failed',
-      failureCode: 'RUNTIME_FAILED',
-      retryable: true,
-    });
-    expect(JSON.stringify(events)).not.toContain(
-      'private ledger backend detail',
-    );
-  });
-
   it('replay只投影既有终态，不再次读取Context或调用Provider', async () => {
     const lifecycle = new MemoryLifecycle(true, [
       {

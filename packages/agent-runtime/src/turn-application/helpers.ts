@@ -203,3 +203,13 @@ export function mapPreparationFailure(
     retryable: !exceeded,
   };
 }
+
+export function mapLoopFailure(
+  modelFailure: NormalizedModelError | null,
+  runtimeFailure: boolean,
+): { code: TurnApplicationFailureCode; retryable: boolean } {
+  if (runtimeFailure) return { code: 'RUNTIME_FAILED', retryable: true };
+  return modelFailure
+    ? mapModelFailure(modelFailure)
+    : { code: 'RUNTIME_FAILED', retryable: true };
+}

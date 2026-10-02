@@ -8,7 +8,7 @@ import {
 import { completeTurnApplication } from './completion';
 import type { TurnApplicationDependencies } from './dependencies';
 import {
-  mapModelFailure,
+  mapLoopFailure,
   mapPreparationFailure,
   NOOP_CANCELLATION,
   NOOP_TRACE,
@@ -27,7 +27,6 @@ import {
   type TurnTerminalState,
 } from './session';
 import { logTurnApplicationFailure } from './failure-diagnostics';
-
 /**
  * Turn Application 主编排服务 — 固定五阶段管线。
  *
@@ -273,13 +272,10 @@ export class TurnApplicationService implements TurnApplicationPort {
         );
         return;
       }
-      if (outcome.runtimeFailure) {
-        yield await emitFailure('RUNTIME_FAILED', true);
-        return;
-      }
-      const mapped = outcome.modelFailure
-        ? mapModelFailure(outcome.modelFailure)
-        : { code: 'RUNTIME_FAILED' as const, retryable: true };
+      const mapped = mapLoopFailure(
+        outcome.modelFailure,
+        outcome.runtimeFailure,
+      );
       yield await emitFailure(mapped.code, mapped.retryable);
     } catch (error) {
       logTurnApplicationFailure({
