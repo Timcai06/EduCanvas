@@ -134,6 +134,7 @@ describe('generateWebAppContent', () => {
     expect(result.content.budget).toMatchObject({
       maxInputBytes: 8_192,
       maxMessageBytes: 8_192,
+      maxOutputBytes: 64 * 1024,
     });
     expect(result.content.diagnostics).toMatchObject([
       { code: 'build_succeeded' },
@@ -152,6 +153,51 @@ describe('generateWebAppContent', () => {
     };
     expect(input.taskAlias).toBe('artifact.generate');
     expect(input.promptVersion).toBe('artifact-web-app-v1');
+    const systemPrompt = (
+      generateStructured.mock.calls[0]![0] as unknown as {
+        messages: Array<{ role: string; content: string }>;
+      }
+    ).messages.find((message) => message.role === 'system')?.content;
+    expect(systemPrompt).toContain('不得使用 import/export、fetch');
+    expect(systemPrompt).toContain('window.educanvasRuntime.succeed()');
+  });
+
+  it('保留超过旧 16 KiB 限额的生成文件，并将输出预算提高到 64 KiB', async () => {
+    const appScript = `document.body.dataset.generated = "${'x'.repeat(20_000)}";`;
+    const generateStructured = vi.fn(async () => ({
+      output: makeModelOutput({
+        manifest: {
+          entry: 'index.html',
+          files: [
+            {
+              path: 'index.html',
+              mediaType: 'text/html',
+              content: '<!doctype html><html><body>ok</body></html>',
+              hash: '0'.repeat(64),
+            },
+            {
+              path: 'app.js',
+              mediaType: 'text/javascript',
+              content: appScript,
+              hash: '0'.repeat(64),
+            },
+          ],
+        },
+      }),
+      metadata: {} as never,
+    }));
+
+    const result = await generateWebAppContent({
+      title: '长脚本',
+      messages,
+      gateway: { generateStructured } as StructuredModelGateway,
+      traceId: 'trace-long-output',
+      operationId: 'job-long-output',
+    });
+
+    expect(result.content.manifest.files[1]?.content).toBe(appScript);
+    expect(Buffer.byteLength(appScript, 'utf8')).toBeGreaterThan(16_000);
+    expect(result.content.budget.maxOutputBytes).toBe(64 * 1024);
   });
 
   it('调用网关 revision 时使用 revision prompt，并重算哈希', async () => {

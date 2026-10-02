@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createHash } from 'node:crypto';
 import { mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { createE2eWorkerLogAudit } from '../../tooling/e2e/e2e-worker-log-audit.mjs';
@@ -15,6 +16,45 @@ async function readBody(request: IncomingMessage): Promise<unknown> {
 }
 
 function structuredFixture(schemaPrompt: string, prompt: string): unknown {
+  if (prompt.includes('课程网页内容生成器')) {
+    const html =
+      '<!doctype html><html><body><main id="runtime-result">正在启动</main></body></html>';
+    const script = [
+      'window.educanvasRuntime.output("A".repeat(16384));',
+      'window.educanvasRuntime.output("B".repeat(16384));',
+      'document.getElementById("runtime-result").textContent = "合成 Provider 生成的 Web App 已执行";',
+      'window.setTimeout(() => window.educanvasRuntime.succeed(), 250);',
+    ].join('\n');
+    const file = (path: string, mediaType: string, content: string) => ({
+      path,
+      mediaType,
+      content,
+      hash: createHash('sha256').update(content, 'utf8').digest('hex'),
+    });
+    return {
+      schemaVersion: 1,
+      manifest: {
+        entry: 'index.html',
+        files: [
+          file('index.html', 'text/html', html),
+          file('app.js', 'text/javascript', script),
+        ],
+      },
+      lockedDependencies: [],
+      capabilities: ['dom-manipulation', 'css-render', 'javascript-runtime'],
+      budget: {
+        maxInputBytes: 8192,
+        maxMessageBytes: 8192,
+        maxOutputBytes: 16_000,
+        maxDurationMs: 5000,
+        maxConcurrentInstances: 1,
+        maxQueueDepth: 10,
+        maxMessagesPerSecond: 5,
+      },
+      diagnostics: [{ code: 'build_succeeded' }],
+      generatedByModel: true,
+    };
+  }
   if (schemaPrompt.includes('"script"')) {
     return {
       script:

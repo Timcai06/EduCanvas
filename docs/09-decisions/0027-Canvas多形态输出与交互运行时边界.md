@@ -99,6 +99,9 @@ React/SVG/Canvas Renderer 呈现。缩放、折叠、拖拽、答题、动画、
 - 声明的 Runtime capability、资源预算与协议版本；
 - 构建诊断和可审计终态，不包含服务端密钥或用户 Credential。
 
+web_app.v1 的 budget.maxOutputBytes 限制一次运行通过 window.educanvasRuntime.output()
+发送的累计 UTF-8 字节数。生成默认值为 64 KiB；Runtime Host 仍以 1 MiB 作为所有运行模式的硬上限。
+
 源码不是主页面 HTML。它必须经过校验、构建和发布成为不可变 Artifact Version，再交给
 ADR-0019 定义的 Tier 2 Web Runtime Adapter。轻量一次性预览继续使用既有 `srcdoc` 边界，
 不得承担持久 Runtime 生命周期。

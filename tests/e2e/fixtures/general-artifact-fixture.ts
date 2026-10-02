@@ -9,7 +9,8 @@ export type ArtifactKind =
   | 'flashcards'
   | 'note'
   | 'audio_overview'
-  | 'picturebook';
+  | 'picturebook'
+  | 'web_app';
 
 export type ArtifactApiKind = Exclude<ArtifactKind, 'audio_overview'>;
 

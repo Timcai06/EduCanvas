@@ -55,6 +55,7 @@ function validateWebAppContent(content: WebAppContent): {
   html: string;
   css: string;
   script: string;
+  maxOutputBytes: number;
 } {
   /* v1 没有依赖字节装载器。即使 manifest 写了锁定版本，Host 也不能从网络
      安装或猜测依赖；必须与 admission 层一样 fail closed。 */
@@ -103,6 +104,10 @@ function validateWebAppContent(content: WebAppContent): {
     html: entry.content,
     css: styles.join('\n'),
     script: scripts.join('\n'),
+    maxOutputBytes: Math.min(
+      content.budget.maxOutputBytes,
+      MAX_RUNTIME_OUTPUT_BYTES,
+    ),
   };
 }
 
@@ -116,6 +121,7 @@ export function compileRuntimePayload(content: WebRuntimeArtifactContent): {
   html: string;
   css: string;
   script: string;
+  maxOutputBytes: number;
 } {
   if ('manifest' in content) {
     const parsed = webAppContentSchema.parse(content);
@@ -125,6 +131,7 @@ export function compileRuntimePayload(content: WebRuntimeArtifactContent): {
     html: content.html,
     css: content.css,
     script: content.script,
+    maxOutputBytes: MAX_RUNTIME_OUTPUT_BYTES,
   };
 }
 
@@ -151,6 +158,7 @@ const hostScript = String.raw`
   let rateWindowStarted = performance.now();
   let rateWindowMessages = 0;
   let outputBytes = 0;
+  let maxOutputBytes = ${MAX_RUNTIME_OUTPUT_BYTES};
 
   const exactKeys = (value, keys) =>
     value && typeof value === "object" &&
@@ -203,6 +211,13 @@ const hostScript = String.raw`
     });
     if (!response.ok) return fail();
     const result = await response.json();
+    const requestedOutputBytes = result.content && result.content.maxOutputBytes;
+    if (
+      !Number.isSafeInteger(requestedOutputBytes) ||
+      requestedOutputBytes <= 0 ||
+      requestedOutputBytes > ${MAX_RUNTIME_OUTPUT_BYTES}
+    ) return fail("resource_quota_exceeded");
+    maxOutputBytes = requestedOutputBytes;
     const start = data.startMessage;
     binding = { ...result.binding, channelId: start.channelId };
     if (!sameBinding(start) || start.type !== "start" || start.sequence !== 0) return fail();
@@ -269,7 +284,7 @@ const hostScript = String.raw`
     if (!["ready","output","succeeded","failed","cancelled"].includes(message.type)) return fail();
     if (message.type === "output") {
       outputBytes += new TextEncoder().encode(String(message.payload && message.payload.value || "")).byteLength;
-      if (outputBytes > ${MAX_RUNTIME_OUTPUT_BYTES}) return fail("resource_quota_exceeded");
+      if (outputBytes > maxOutputBytes) return fail("resource_quota_exceeded");
     }
     nextSequence += 1;
     if (["succeeded","failed","cancelled"].includes(message.type)) terminal = true;
