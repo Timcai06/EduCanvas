@@ -25,7 +25,9 @@ function notebookSidebar(page: Page) {
 async function openNotebookSidebar(page: Page) {
   const sidebar = notebookSidebar(page);
   if ((await sidebar.getAttribute("aria-hidden")) === "true") {
-    await page.getByRole("button", { name: "打开笔记本列表" }).click();
+    const openButton = page.getByRole("button", { name: "打开笔记本列表" });
+    /* route hydration may expand the sidebar after the attribute read */
+    if (await openButton.isVisible()) await openButton.click();
   }
   await expect(sidebar).toHaveAttribute("aria-hidden", "false");
   return sidebar;
