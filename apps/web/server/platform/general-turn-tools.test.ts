@@ -181,12 +181,14 @@ function tool(name: string): AgentTool<{ value: string }, { result: string }> {
 }
 
 describe('General turn artifact status tool mode', () => {
-  it('registers status reads for ordinary chat and leaves them out of deep research', () => {
+  it('offers proposals in auto, writes only for explicit output, and no artifact tools in research', () => {
     const createTool = vi.fn(() => tool('createCanvasArtifact'));
     const getStatusTool = vi.fn(() => tool('getCanvasArtifactStatus'));
+    const requestConfirmationTool = vi.fn(() => tool('proposeCanvasArtifact'));
     const artifacts = {
       createTool,
       getStatusTool,
+      requestConfirmationTool,
     } as unknown as WebOperationArtifacts;
     const sources = {
       trafficKey: 'test-traffic-key',
@@ -198,17 +200,39 @@ describe('General turn artifact status tool mode', () => {
 
     const ordinary = createGeneralToolKernel(sources, artifacts, images, {
       deepResearch: false,
+      allowArtifactConfirmation: true,
     });
     expect(ordinary.staticCapabilities).toContain('artifact.read');
-    expect(ordinary.staticCapabilities).toContain('artifact.create');
+    expect(ordinary.staticCapabilities).toContain(
+      'artifact.confirmation.propose',
+    );
+    expect(ordinary.staticCapabilities).not.toContain('artifact.create');
     expect(getStatusTool).toHaveBeenCalledTimes(1);
+    expect(requestConfirmationTool).toHaveBeenCalledTimes(1);
+    expect(createTool).not.toHaveBeenCalled();
+
+    const explicitOutput = createGeneralToolKernel(sources, artifacts, images, {
+      deepResearch: false,
+      allowArtifactWrites: true,
+    });
+    expect(explicitOutput.staticCapabilities).toContain('artifact.create');
+    expect(explicitOutput.staticCapabilities).toContain('artifact.read');
+    expect(explicitOutput.staticCapabilities).not.toContain(
+      'artifact.confirmation.propose',
+    );
+    expect(createTool).toHaveBeenCalledOnce();
 
     getStatusTool.mockClear();
+    requestConfirmationTool.mockClear();
     const research = createGeneralToolKernel(sources, artifacts, images, {
       deepResearch: true,
     });
     expect(research.staticCapabilities).not.toContain('artifact.read');
-    expect(research.staticCapabilities).toContain('artifact.create');
+    expect(research.staticCapabilities).not.toContain('artifact.create');
+    expect(research.staticCapabilities).not.toContain(
+      'artifact.confirmation.propose',
+    );
     expect(getStatusTool).not.toHaveBeenCalled();
+    expect(requestConfirmationTool).not.toHaveBeenCalled();
   });
 });
