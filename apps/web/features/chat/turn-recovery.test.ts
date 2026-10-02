@@ -132,6 +132,34 @@ describe('turn recovery protocol', () => {
     expect(sleep).toHaveBeenCalledOnce();
   });
 
+  it('declares the exact versioned event extensions on every recovery request', async () => {
+    let requestedUrl = '';
+    const controller = new TurnRecoveryController({
+      eventsEndpoint: (turnId) => `/api/v1/chat/turn/${turnId}/events`,
+      eventExtensions: ['artifact.confirmation@1'],
+      fetchImpl: async (input) => {
+        requestedUrl = input;
+        return Response.json({
+          events: [completed(2)],
+          nextSequence: 2,
+          terminal: true,
+        });
+      },
+    });
+
+    await expect(
+      controller.recover(
+        'turn-1',
+        0,
+        () => undefined,
+        new AbortController().signal,
+      ),
+    ).resolves.toMatchObject({ nextSequence: 2, terminal: true });
+    expect(requestedUrl).toBe(
+      '/api/v1/chat/turn/turn-1/events?after=0&extension=artifact.confirmation%401',
+    );
+  });
+
   it('keeps empty non-terminal batches bounded', async () => {
     const fetchImpl = vi.fn(async () =>
       Response.json({ events: [], nextSequence: 0, terminal: false }),

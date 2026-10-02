@@ -4,6 +4,7 @@ import { notebookScopedFetch } from '@/features/workspace/general/notebook-reque
 import { useCallback, type Dispatch, type RefObject } from 'react';
 import type { TeachingTurnAction } from './turn-state';
 import type { TeachingTurnEvent } from './turn-events';
+import type { GatewayOperationEventExtension } from '@educanvas/gateway-core';
 import { TurnStreamProtocolError } from './turn-events';
 import type { InFlightTurn } from './turn-send-outcome';
 import { terminalEventTypeToSendOutcome } from './turn-send-outcome';
@@ -29,6 +30,7 @@ export function useTurnRecoveryRuntime(input: {
   consumeResearch: (enabled: boolean, event: TeachingTurnEvent) => void;
   restoreResearch: (snapshot: TurnResearchSnapshot) => void;
   eventsEndpoint?: (turnId: string) => string;
+  eventExtensions?: readonly GatewayOperationEventExtension[];
 }) {
   const {
     mounted,
@@ -40,6 +42,7 @@ export function useTurnRecoveryRuntime(input: {
     consumeResearch,
     restoreResearch,
     eventsEndpoint,
+    eventExtensions,
   } = input;
   const applyTurnEvent = useCallback(
     (
@@ -140,6 +143,7 @@ export function useTurnRecoveryRuntime(input: {
       current.recoveryAttempted = true;
       const controller = new TurnRecoveryController({
         eventsEndpoint,
+        eventExtensions,
         fetchImpl: (url, init) =>
           notebookScopedFetch(url, init, current.notebookRequestContext),
         onResearchSnapshot: restoreResearch,
@@ -153,7 +157,7 @@ export function useTurnRecoveryRuntime(input: {
       current.nextSequence = result.nextSequence;
       return result.terminal;
     },
-    [applyTurnEvent, eventsEndpoint, restoreResearch],
+    [applyTurnEvent, eventExtensions, eventsEndpoint, restoreResearch],
   );
 
   return { applyTurnEvent, recoverTurn } as const;

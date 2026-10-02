@@ -16,6 +16,45 @@ import {
 import type { GatewayEventPayload, GatewayTurnRunnerPort } from './ports';
 
 const now = new Date('2026-07-19T04:00:00.000Z');
+const legacyStrictV1Reader = {
+  safeParse(value: unknown): { success: boolean } {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+      return { success: false };
+    }
+    const event = value as Record<string, unknown>;
+    const baseKeys = [
+      'protocol',
+      'eventId',
+      'operationId',
+      'sequence',
+      'occurredAt',
+      'type',
+    ];
+    const eventKeys =
+      event.type === 'operation.accepted'
+        ? baseKeys
+        : event.type === 'operation.failed'
+          ? [...baseKeys, 'code', 'retryable']
+          : [];
+    const keys = Object.keys(event).sort();
+    const expectedKeys = [...eventKeys].sort();
+    const exactShape =
+      keys.length === expectedKeys.length &&
+      keys.every((key, index) => key === expectedKeys[index]);
+    const validBase =
+      event.protocol === 'gateway.v1' &&
+      typeof event.eventId === 'string' &&
+      typeof event.operationId === 'string' &&
+      typeof event.sequence === 'number' &&
+      typeof event.occurredAt === 'string';
+    const validFailure =
+      event.type !== 'operation.failed' ||
+      (typeof event.code === 'string' && typeof event.retryable === 'boolean');
+    return {
+      success: eventKeys.length > 0 && exactShape && validBase && validFailure,
+    };
+  },
+};
 
 function envelope(text = '解释光合作用'): GatewayInboundEnvelope {
   return {
@@ -58,6 +97,26 @@ function envelope(text = '解释光合作用'): GatewayInboundEnvelope {
     replyTarget: {
       kind: 'connection',
       connectionId: 'connection:web:1',
+    },
+  };
+}
+
+function withArtifactConfirmationV1(
+  request: GatewayInboundEnvelope,
+): GatewayInboundEnvelope {
+  return {
+    ...request,
+    capabilities: {
+      ...request.capabilities,
+      capabilities: [
+        ...request.capabilities.capabilities,
+        {
+          name: 'artifact.confirmation',
+          risk: 'l0',
+          version: '1',
+          constraints: {},
+        },
+      ],
     },
   };
 }
@@ -170,6 +229,106 @@ describe('GatewayService', () => {
     await expect(
       collect(service.handle(envelope('另一条消息'))),
     ).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
+  });
+
+  it('fails closed when an unnegotiated event extension is produced', async () => {
+    const service = buildService({
+      async *run(input) {
+        yield {
+          type: 'artifact.confirmation_required',
+          confirmationId: 'confirmation:1',
+          artifactKind: 'note',
+          title: '学习笔记',
+        };
+        yield {
+          type: 'operation.completed',
+          messageId: 'message:assistant:1',
+        };
+      },
+    });
+
+    const events = await collect(service.handle(envelope()));
+
+    expect(events.map((event) => event.type)).toEqual([
+      'operation.accepted',
+      'operation.failed',
+    ]);
+    expect(
+      events.every((event) => legacyStrictV1Reader.safeParse(event).success),
+    ).toBe(true);
+    expect(
+      legacyStrictV1Reader.safeParse({
+        protocol: 'gateway.v1',
+        eventId: 'event:extension',
+        operationId: events[0]!.operationId,
+        sequence: 1,
+        occurredAt: now.toISOString(),
+        type: 'artifact.confirmation_required',
+        confirmationId: 'confirmation:1',
+        artifactKind: 'note',
+        title: '学习笔记',
+      }).success,
+    ).toBe(false);
+    expect(events.at(-1)).toMatchObject({
+      code: 'CAPABILITY_UNAVAILABLE',
+      retryable: false,
+    });
+    await expect(
+      service.resume({
+        operationId: events[0]!.operationId,
+        afterSequence: 99,
+        principalUserId: 'user:1',
+      }),
+    ).resolves.toEqual([]);
+  });
+
+  it('replays and resumes confirmation v1 only for clients that declare it', async () => {
+    let runnerCalls = 0;
+    const service = buildService({
+      async *run() {
+        runnerCalls += 1;
+        yield {
+          type: 'artifact.confirmation_required',
+          confirmationId: 'confirmation:1',
+          artifactKind: 'note',
+          title: '学习笔记',
+        };
+        yield {
+          type: 'operation.completed',
+          messageId: 'message:assistant:1',
+        };
+      },
+    });
+    const request = withArtifactConfirmationV1(envelope());
+    const first = await collect(service.handle(request));
+    const replay = await collect(service.handle(request));
+    const operationId = first[0]!.operationId;
+
+    expect(first.map((event) => event.type)).toEqual([
+      'operation.accepted',
+      'artifact.confirmation_required',
+      'operation.completed',
+    ]);
+    expect(replay).toEqual(first);
+    expect(runnerCalls).toBe(1);
+    await expect(
+      service.resume({
+        operationId,
+        afterSequence: 1,
+        principalUserId: 'user:1',
+      }),
+    ).rejects.toMatchObject({ code: 'CAPABILITY_UNAVAILABLE' });
+    await expect(
+      service.resume({
+        operationId,
+        afterSequence: 0,
+        principalUserId: 'user:1',
+        eventExtensions: ['artifact.confirmation@1'],
+      }),
+    ).resolves.toMatchObject([
+      { type: 'artifact.confirmation_required', sequence: 1 },
+      { type: 'operation.completed', sequence: 2 },
+    ]);
   });
 
   it('fails closed when a runner exits without a terminal event', async () => {

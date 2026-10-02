@@ -12,6 +12,8 @@ import {
   gatewayInboundEnvelopeSchema,
   gatewayNodeInvocationRequestSchema,
   gatewayOperationEventSchema,
+  gatewayOperationEventExtensionsForCapabilities,
+  missingGatewayOperationEventExtensions,
   gatewayProtocolVersion,
   gatewayResolvedRouteSchema,
   isGatewayTerminalEvent,
@@ -196,6 +198,40 @@ describe('Gateway contracts', () => {
     ).toHaveLength(2);
   });
 
+  it('requires the exact confirmation event extension version', () => {
+    const confirmation = gatewayOperationEventSchema.parse({
+      protocol: 'gateway.v1',
+      eventId: 'event:confirmation',
+      operationId: 'operation:1',
+      sequence: 1,
+      occurredAt,
+      type: 'artifact.confirmation_required',
+      confirmationId: 'confirmation:1',
+      artifactKind: 'note',
+      title: '学习笔记',
+    });
+
+    expect(
+      gatewayOperationEventExtensionsForCapabilities([
+        { name: 'artifact.confirmation', version: '1' },
+      ]),
+    ).toEqual(['artifact.confirmation@1']);
+    expect(
+      gatewayOperationEventExtensionsForCapabilities([
+        { name: 'artifact.confirmation', version: '2' },
+      ]),
+    ).toEqual([]);
+    expect(missingGatewayOperationEventExtensions([confirmation], [])).toEqual([
+      'artifact.confirmation@1',
+    ]);
+    expect(
+      missingGatewayOperationEventExtensions(
+        [confirmation],
+        ['artifact.confirmation@1'],
+      ),
+    ).toEqual([]);
+  });
+
   it('rejects unsafe Node capabilities and malformed delivery failures', () => {
     expect(() =>
       gatewayNodeInvocationRequestSchema.parse({
@@ -250,6 +286,7 @@ describe('Desktop capability manifest (DP06)', () => {
     }
     // 刻意不含 artifact.native：Artifact 走可验证 Web handoff 降级（DP08）。
     expect(manifest.capabilities).not.toContain('artifact.native');
+    expect(manifest.capabilities).not.toContain('artifact.confirmation');
   });
 
   it('requires the client turn to explicitly carry the capability manifest', () => {

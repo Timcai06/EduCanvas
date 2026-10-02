@@ -122,6 +122,7 @@ describe('GET /api/v1/chat/turn/[turnId]/events', () => {
     expect(resumeWebGatewayTurn).toHaveBeenCalledWith(identity, {
       turnId: 'turn-1',
       afterSequence: 0,
+      eventExtensions: [],
     });
     const body = await response.json();
     expect(body).toEqual({
@@ -157,6 +158,40 @@ describe('GET /api/v1/chat/turn/[turnId]/events', () => {
     expect(JSON.stringify(body)).not.toContain('must-not-leak');
   });
 
+  it('forwards only explicitly versioned event extensions to recovery', async () => {
+    const response = await GET(
+      request(
+        'http://localhost/api/v1/chat/turn/turn-1/events?after=2&extension=artifact.confirmation%401',
+      ),
+      { params: params() },
+    );
+
+    expect(response.status).toBe(200);
+    expect(resumeWebGatewayTurn).toHaveBeenCalledWith(identity, {
+      turnId: 'turn-1',
+      afterSequence: 2,
+      eventExtensions: ['artifact.confirmation@1'],
+    });
+  });
+
+  it('does not return persisted extensions to a client that did not negotiate them', async () => {
+    vi.mocked(resumeWebGatewayTurn).mockRejectedValueOnce(
+      Object.assign(new Error('gateway_event_extension_unavailable'), {
+        code: 'CAPABILITY_UNAVAILABLE',
+      }),
+    );
+
+    const response = await GET(
+      request('http://localhost/api/v1/chat/turn/turn-1/events?after=99'),
+      { params: params() },
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'CAPABILITY_UNAVAILABLE' },
+    });
+  });
+
   it('rejects cross-origin, unauthenticated, and malformed requests', async () => {
     const crossOrigin = await GET(
       request('http://localhost/api/v1/chat/turn/turn-1/events?after=0', {
@@ -173,7 +208,13 @@ describe('GET /api/v1/chat/turn/[turnId]/events', () => {
     );
     expect(unauthorized.status).toBe(401);
 
-    for (const query of ['after=-2', 'after=01', 'after=1000001']) {
+    for (const query of [
+      'after=-2',
+      'after=01',
+      'after=1000001',
+      'after=0&extension=artifact.confirmation%402',
+      'after=0&extension=artifact.confirmation%401&extension=artifact.confirmation%401',
+    ]) {
       const malformed = await GET(
         request(`http://localhost/api/v1/chat/turn/turn-1/events?${query}`),
         { params: params() },

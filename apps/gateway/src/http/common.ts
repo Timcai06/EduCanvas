@@ -172,6 +172,9 @@ export function mapError(error: unknown): {
     if (error.code === 'IDEMPOTENCY_CONFLICT') {
       return { status: 409, code: 'IDEMPOTENCY_CONFLICT' };
     }
+    if (error.code === 'CAPABILITY_UNAVAILABLE') {
+      return { status: 409, code: 'CAPABILITY_UNAVAILABLE' };
+    }
     if (
       error.code === 'ROUTE_NOT_FOUND' ||
       error.code === 'OPERATION_NOT_FOUND'

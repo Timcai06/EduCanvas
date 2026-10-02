@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   ensureRegistered: vi.fn(),
   beginTurn: vi.fn(),
   gatewayService: vi.fn(),
+  gatewayEnvelope: null as unknown,
 }));
 
 vi.mock('server-only', () => ({}));
@@ -46,6 +47,7 @@ vi.mock('@educanvas/gateway-runtime', () => ({
       run(input: unknown): AsyncIterable<unknown>;
     };
     handle = (envelope: unknown) => {
+      mocks.gatewayEnvelope = envelope;
       const runner = this.runner;
       return {
         [Symbol.asyncIterator]: async function* () {
@@ -128,7 +130,7 @@ const request = {
   clientMessageId: 'artifact.confirm.11111111111141118111111111111111',
   text: '确认创建Slides',
   parts: [{ type: 'text' as const, text: '确认创建Slides' }],
-  supportsArtifactConfirmation: true,
+  eventExtensions: ['artifact.confirmation@1'] as const,
   artifactConfirmationId: confirmationId,
   outputPreference: 'interactive_artifact' as const,
 };
@@ -167,6 +169,23 @@ describe('confirmed artifact startup contract', () => {
 
     expect(mocks.getForExecution).toHaveBeenCalledOnce();
     expect(mocks.confirm).not.toHaveBeenCalled();
+  });
+
+  it('maps the negotiated event extension to its exact Gateway capability version', async () => {
+    await beginWebGatewayTurn(identity, request);
+
+    expect(mocks.gatewayEnvelope).toMatchObject({
+      capabilities: {
+        capabilities: expect.arrayContaining([
+          {
+            name: 'artifact.confirmation',
+            risk: 'l0',
+            version: '1',
+            constraints: {},
+          },
+        ]),
+      },
+    });
   });
 
   it('consumes once only after Gateway emits message.started', async () => {

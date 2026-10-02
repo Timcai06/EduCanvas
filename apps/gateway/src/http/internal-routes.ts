@@ -2,6 +2,7 @@ import {
   gatewayEffectReconciliationPrincipalHeader,
   resolveGatewayEffectReconciliationPrincipal,
 } from '../effect-reconciliation-control';
+import { gatewayOperationEventExtensionsSchema } from '@educanvas/gateway-core';
 import {
   HANDLED,
   UNHANDLED,
@@ -119,10 +120,14 @@ export async function handleInternalRoutes(
       writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
       return HANDLED;
     }
+    const eventExtensions = gatewayOperationEventExtensionsSchema.parse(
+      url.searchParams.getAll('extension'),
+    );
     const events = await deps.service.resume({
       operationId: match[1]!,
       afterSequence: after,
       principalUserId: actorUserId,
+      eventExtensions,
     });
     writeJson(response, 200, { events });
     return HANDLED;

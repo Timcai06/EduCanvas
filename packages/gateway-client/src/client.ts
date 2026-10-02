@@ -3,6 +3,7 @@ import {
   gatewayClientTurnRequestSchema,
   gatewayConversationCreateRequestSchema,
   gatewayDesktopCapabilityManifest,
+  gatewayCapabilityDefaultVersion,
   gatewayConversationCreateResultSchema,
   gatewayConversationDirectoryCursorSchema,
   gatewayConversationDirectoryPageSchema,
@@ -16,6 +17,7 @@ import {
   gatewayMessageHistoryCursorSchema,
   gatewayMessageHistoryPageSchema,
   gatewayOperationEventSchema,
+  gatewayOperationEventExtensionsForCapabilities,
   type GatewayAssetSnapshot,
   type GatewayClientTurnRequest,
   type GatewayConversationCreateRequest,
@@ -662,6 +664,15 @@ export class GatewayClient {
       `${this.baseUrl}/v1/client/operations/${encodeURIComponent(operationId)}/events`,
     );
     url.searchParams.set('after', String(afterSequence));
+    const eventExtensions = gatewayOperationEventExtensionsForCapabilities(
+      gatewayDesktopCapabilityManifest.capabilities.map((name) => ({
+        name,
+        version: gatewayCapabilityDefaultVersion,
+      })),
+    );
+    for (const extension of eventExtensions) {
+      url.searchParams.append('extension', extension);
+    }
     const response = await this.fetcher(url, { headers: this.headers() });
     if (!response.ok) throw await parseError(response);
     return resumeSchema.parse(await response.json()).events;

@@ -3,9 +3,13 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type {
   GatewayInboundEnvelope,
+  GatewayOperationEventExtension,
   GatewayOperationEvent,
 } from '@educanvas/gateway-core';
-import { gatewayProtocolVersion } from '@educanvas/gateway-core';
+import {
+  gatewayProtocolVersion,
+  missingGatewayOperationEventExtensions,
+} from '@educanvas/gateway-core';
 import {
   DrizzleGatewayIdentityRepository,
   DrizzleGatewayOperationStore,
@@ -228,7 +232,7 @@ export async function beginWebGatewayTurn(
         { name: 'output.markdown', risk: 'l0', version: '1', constraints: {} },
         { name: 'output.stream', risk: 'l0', version: '1', constraints: {} },
         { name: 'artifact.native', risk: 'l1', version: '1', constraints: {} },
-        ...(request.supportsArtifactConfirmation
+        ...(request.eventExtensions?.includes('artifact.confirmation@1')
           ? [
               {
                 name: 'artifact.confirmation' as const,
@@ -310,13 +314,27 @@ export async function beginWebGatewayTurn(
  */
 export async function resumeWebGatewayTurn(
   identity: AnonymousIdentity,
-  input: { turnId: string; afterSequence: number; conversationId?: string },
+  input: {
+    turnId: string;
+    afterSequence: number;
+    conversationId?: string;
+    eventExtensions?: readonly GatewayOperationEventExtension[];
+  },
 ): Promise<readonly GatewayOperationEvent[]> {
-  return operations.listEvents(
+  const events = await operations.listEvents(
     input.turnId,
-    input.afterSequence,
+    -1,
     identity.studentId,
     undefined,
     input.conversationId,
   );
+  if (
+    missingGatewayOperationEventExtensions(events, input.eventExtensions ?? [])
+      .length > 0
+  ) {
+    throw Object.assign(new Error('gateway_event_extension_unavailable'), {
+      code: 'CAPABILITY_UNAVAILABLE' as const,
+    });
+  }
+  return events.filter((event) => event.sequence > input.afterSequence);
 }

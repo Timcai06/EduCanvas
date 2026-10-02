@@ -1,4 +1,5 @@
 import { notebookScopedFetch } from '@/features/workspace/general/notebook-request-context';
+import type { GatewayOperationEventExtension } from '@educanvas/gateway-core';
 import {
   parseTeachingTurnEvent,
   TurnStreamProtocolError,
@@ -221,6 +222,7 @@ export interface TurnRecoveryResult {
 
 export interface TurnRecoveryControllerOptions {
   readonly eventsEndpoint: (turnId: string) => string;
+  readonly eventExtensions?: readonly GatewayOperationEventExtension[];
   readonly fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
   readonly maxAttempts?: number;
   readonly retryDelaysMs?: readonly number[];
@@ -279,7 +281,12 @@ export class TurnRecoveryController {
       if (signal.aborted)
         throw new DOMException('The operation was aborted.', 'AbortError');
       try {
-        const url = `${this.options.eventsEndpoint(turnId)}?after=${nextSequence}`;
+        const endpoint = this.options.eventsEndpoint(turnId);
+        const query = new URLSearchParams({ after: String(nextSequence) });
+        for (const extension of this.options.eventExtensions ?? []) {
+          query.append('extension', extension);
+        }
+        const url = `${endpoint}${endpoint.includes('?') ? '&' : '?'}${query}`;
         const response = await this.fetchImpl(url, {
           method: 'GET',
           headers: { accept: 'application/json' },

@@ -9,6 +9,7 @@ import {
   gatewayHandoffCredentialSchema,
   gatewayHandoffIssueRequestSchema,
   gatewayOpaqueIdSchema,
+  gatewayOperationEventExtensionsSchema,
   gatewayProtocolVersion,
   type GatewayCapabilityManifest,
   type GatewayClientTurnRequest,
@@ -640,11 +641,15 @@ export async function handleClientRoutes(
         writeJson(response, 400, { error: { code: 'INVALID_REQUEST' } });
         return HANDLED;
       }
+      const eventExtensions = gatewayOperationEventExtensionsSchema.parse(
+        url.searchParams.getAll('extension'),
+      );
       writeJson(response, 200, {
         events: await deps.service.resume({
           operationId: operationMatch[1]!,
           afterSequence: after,
           principalUserId: identity.userId,
+          eventExtensions,
         }),
       });
       return HANDLED;
