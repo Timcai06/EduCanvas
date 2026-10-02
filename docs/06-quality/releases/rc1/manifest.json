@@ -9,7 +9,7 @@
     "timestamp": "2026-07-27T00:00:00Z"
   },
   "migration": {
-    "version": 64,
+    "version": 68,
     "fresh": { "status": "passed", "timestamp": "2026-10-02T10:18:13Z" },
     "upgrade": { "status": "passed", "timestamp": "2026-10-02T10:18:13Z" }
   },
