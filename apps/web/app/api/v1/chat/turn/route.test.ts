@@ -209,6 +209,23 @@ describe('POST /api/v1/chat/turn', () => {
     });
   });
 
+  it('does not report an unsupported replay event extension as a server outage', async () => {
+    vi.mocked(beginWebGatewayTurn).mockRejectedValue(
+      Object.assign(new Error('internal detail'), {
+        code: 'CAPABILITY_UNAVAILABLE',
+      }),
+    );
+
+    const response = await POST(
+      turnRequest(JSON.stringify({ clientMessageId: 'msg-1', text: 'hi' })),
+    );
+
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: 'CAPABILITY_UNAVAILABLE' },
+    });
+  });
+
   it('maps missing conversation to 404', async () => {
     vi.mocked(beginWebGatewayTurn).mockRejectedValue(
       new PlatformTurnOwnershipError(),

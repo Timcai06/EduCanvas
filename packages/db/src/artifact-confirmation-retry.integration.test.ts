@@ -8,6 +8,7 @@ import {
   DrizzleArtifactConfirmationRepository,
   artifactConfirmationMessageId,
 } from './artifact-confirmation-repository';
+import { DrizzleAssetRepository } from './asset-repository';
 import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
 import { DrizzlePlatformTurnRepository } from './platform-turn-repository';
 import { agentOperations } from './schema';
@@ -31,6 +32,30 @@ const database = connection ? drizzle(connection, { schema }) : null;
 function getDatabase() {
   if (!database) throw new Error('TEST_DATABASE_URL未设置');
   return database;
+}
+
+async function createProposalSource(owner: string, spaceId: string) {
+  const source = await new DrizzleAssetRepository(getDatabase()).createUploaded(
+    {
+      ownerSubjectId: owner,
+      spaceId,
+      scope: 'space',
+      kind: 'document',
+      displayName: '已选择的来源.txt',
+      mimeType: 'text/plain',
+      byteSize: 24,
+      contentHash: 'a'.repeat(64),
+      storageKey: `artifact-confirmation/${owner}/source.txt`,
+      extractedText: '用于产物确认回归的原始来源。',
+      outcome: { status: 'ready' },
+    },
+  );
+  if (!source.version) throw new Error('proposal_source_version_missing');
+  return {
+    assetId: source.descriptor.assetId,
+    versionId: source.version.versionId,
+    kind: 'document' as const,
+  };
 }
 
 describeWithDatabase('artifact confirmation retry attempts', () => {
@@ -68,10 +93,19 @@ describeWithDatabase('artifact confirmation retry attempts', () => {
         spaceKind: 'notebook',
         spaceTitle: '确认重试测试',
       });
+      const sourceReference = await createProposalSource(
+        owner,
+        conversation.spaceId,
+      );
       const proposalParts = [
         {
           type: 'text' as const,
           text: '请依据上传的 PDF 和所选来源制作课件。',
+        },
+        {
+          type: 'asset_ref' as const,
+          reference: sourceReference,
+          usage: 'attachment' as const,
         },
       ];
       const proposalTurn = await turns.createOrGetTurn({
@@ -177,8 +211,17 @@ describeWithDatabase('artifact confirmation retry attempts', () => {
       spaceKind: 'notebook',
       spaceTitle: '来源范围测试',
     });
+    const sourceReference = await createProposalSource(
+      owner,
+      conversation.spaceId,
+    );
     const proposalParts = [
       { type: 'text' as const, text: '基于已选择的 Notebook 来源创建产物。' },
+      {
+        type: 'asset_ref' as const,
+        reference: sourceReference,
+        usage: 'attachment' as const,
+      },
     ];
     const proposalTurn = await turns.createOrGetTurn({
       conversationId: conversation.id,
