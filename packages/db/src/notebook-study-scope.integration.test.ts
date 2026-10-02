@@ -3,7 +3,7 @@ import { DrizzleStudyDiagnosticRepository } from './study-diagnostic-repository'
 import { DrizzleTeachingUnitOfWork } from './teaching-adapters';
 import { StudyPlanNotFoundError } from './study-repository-contracts';
 import { randomUUID } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { migrate } from 'drizzle-orm/postgres-js/migrator';
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import {
@@ -69,7 +69,9 @@ run('Notebook teaching Session isolation', () => {
     const revoke = fixture.database.transaction(async (transaction) => {
       await transaction
         .update(schema.notebookMemberships)
-        .set({ revokedAt: new Date() })
+        .set({
+          revokedAt: sql`greatest(clock_timestamp(), ${schema.notebookMemberships.grantedAt})`,
+        })
         .where(
           and(
             eq(schema.notebookMemberships.notebookId, n.notebookId),
