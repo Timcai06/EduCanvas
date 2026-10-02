@@ -1,11 +1,12 @@
 import type { OutputPreference } from '@educanvas/agent-core';
+import type { GatewayOperationEventExtension } from '@educanvas/gateway-core';
 
 export interface AgentTurnClientOptions {
   endpoint: string;
   assistantLabel: string;
   cancelEndpoint?: (turnId: string) => string;
   eventsEndpoint?: (turnId: string) => string;
-  supportsArtifactConfirmation?: boolean;
+  eventExtensions?: readonly GatewayOperationEventExtension[];
 }
 
 export interface AgentTurnSendOptions {

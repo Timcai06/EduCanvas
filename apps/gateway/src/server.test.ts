@@ -373,7 +373,7 @@ describe('Gateway HTTP composition root', () => {
     ]);
 
     const resumed = await fetch(
-      `${base}/v1/internal/operations/${events[0]!.operationId}/events?after=0`,
+      `${base}/v1/internal/operations/${events[0]!.operationId}/events?after=0&extension=artifact.confirmation%401`,
       {
         headers: {
           authorization: `Bearer ${token}`,

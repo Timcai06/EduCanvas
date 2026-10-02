@@ -3,9 +3,13 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import type {
   GatewayInboundEnvelope,
+  GatewayOperationEventExtension,
   GatewayOperationEvent,
 } from '@educanvas/gateway-core';
-import { gatewayProtocolVersion } from '@educanvas/gateway-core';
+import {
+  gatewayProtocolVersion,
+  missingGatewayOperationEventExtensions,
+} from '@educanvas/gateway-core';
 import {
   DrizzleGatewayIdentityRepository,
   DrizzleGatewayOperationStore,
@@ -33,7 +37,10 @@ import {
   DrizzleArtifactConfirmationRepository,
   artifactConfirmationMessageId,
 } from '@educanvas/db';
-import type { ArtifactProposalKind } from '@educanvas/agent-core';
+import type {
+  AgentMessagePart,
+  ArtifactProposalKind,
+} from '@educanvas/agent-core';
 import { loadOwnedGeneralRequestConversation } from '../platform/general-request-conversation-context';
 import { gatewayToLegacy } from './turn-application-projection';
 
@@ -123,6 +130,7 @@ export async function beginWebGatewayTurn(
     throw new PlatformTurnOwnershipError();
   }
   let confirmedArtifactKind: ArtifactProposalKind | undefined;
+  let confirmationSourceParts: readonly AgentMessagePart[] | undefined;
   let confirmationRepository: DrizzleArtifactConfirmationRepository | null =
     null;
   let confirmationScope: {
@@ -152,6 +160,7 @@ export async function beginWebGatewayTurn(
       });
     }
     confirmedArtifactKind = confirmed.confirmedKind ?? confirmed.artifactKind;
+    confirmationSourceParts = confirmed.proposalParts;
     request = {
       ...request,
       text: '请根据前一条请求创建我刚确认的持久产物。',
@@ -176,7 +185,9 @@ export async function beginWebGatewayTurn(
   const assetContext = await prepareGatewayGeneralTurnContext({
     identity,
     spaceId: conversation.spaceId,
-    request,
+    request: confirmationSourceParts
+      ? { ...request, parts: [...confirmationSourceParts] }
+      : request,
     modelRuntime,
   });
   const principal = identity.studentId.startsWith('anon:')
@@ -221,7 +232,7 @@ export async function beginWebGatewayTurn(
         { name: 'output.markdown', risk: 'l0', version: '1', constraints: {} },
         { name: 'output.stream', risk: 'l0', version: '1', constraints: {} },
         { name: 'artifact.native', risk: 'l1', version: '1', constraints: {} },
-        ...(request.supportsArtifactConfirmation
+        ...(request.eventExtensions?.includes('artifact.confirmation@1')
           ? [
               {
                 name: 'artifact.confirmation' as const,
@@ -303,13 +314,27 @@ export async function beginWebGatewayTurn(
  */
 export async function resumeWebGatewayTurn(
   identity: AnonymousIdentity,
-  input: { turnId: string; afterSequence: number; conversationId?: string },
+  input: {
+    turnId: string;
+    afterSequence: number;
+    conversationId?: string;
+    eventExtensions?: readonly GatewayOperationEventExtension[];
+  },
 ): Promise<readonly GatewayOperationEvent[]> {
-  return operations.listEvents(
+  const events = await operations.listEvents(
     input.turnId,
-    input.afterSequence,
+    -1,
     identity.studentId,
     undefined,
     input.conversationId,
   );
+  if (
+    missingGatewayOperationEventExtensions(events, input.eventExtensions ?? [])
+      .length > 0
+  ) {
+    throw Object.assign(new Error('gateway_event_extension_unavailable'), {
+      code: 'CAPABILITY_UNAVAILABLE' as const,
+    });
+  }
+  return events.filter((event) => event.sequence > input.afterSequence);
 }

@@ -1,5 +1,6 @@
+import type { AgentMessagePart } from '@educanvas/agent-core';
 import type { Page } from '@playwright/test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { activeConversationId } from './general-artifact-fixture';
 
 export interface ArtifactConfirmationFixture {
@@ -14,6 +15,7 @@ export interface ArtifactConfirmationFixture {
 export async function createArtifactConfirmationFixture(
   page: Page,
   title: string,
+  options: { includeDocumentSource?: boolean } = {},
 ): Promise<ArtifactConfirmationFixture> {
   const conversationId = await activeConversationId(page);
   const databaseUrl = process.env.E2E_DATABASE_URL;
@@ -33,11 +35,41 @@ export async function createArtifactConfirmationFixture(
   if (!conversation) throw new Error('E2E 当前会话行不存在');
 
   const turns = new db.DrizzlePlatformTurnRepository();
+  const proposalParts: AgentMessagePart[] = [
+    { type: 'text', text: `建议创建产物：${title}` },
+  ];
+  if (options.includeDocumentSource) {
+    const sourceText = '确认后仍须使用原始选择的来源。';
+    const source = await new db.DrizzleAssetRepository().createUploaded({
+      ownerSubjectId: conversation.ownerSubjectId,
+      spaceId: conversation.spaceId,
+      scope: 'space',
+      kind: 'document',
+      displayName: '确认来源.txt',
+      mimeType: 'text/plain',
+      byteSize: Buffer.byteLength(sourceText),
+      contentHash: createHash('sha256').update(sourceText).digest('hex'),
+      storageKey: `e2e/${conversation.id}/confirmation-source-${randomUUID()}.txt`,
+      extractedText: sourceText,
+      outcome: { status: 'ready' },
+    });
+    if (!source.version)
+      throw new Error('E2E confirmation source version missing');
+    proposalParts.push({
+      type: 'asset_ref',
+      reference: {
+        assetId: source.descriptor.assetId,
+        versionId: source.version.versionId,
+        kind: 'document',
+      },
+      usage: 'attachment',
+    });
+  }
   const proposalTurn = await turns.createOrGetTurn({
     conversationId: conversation.id,
     trustedSubjectId: conversation.ownerSubjectId,
     clientMessageId: randomUUID(),
-    text: `建议创建产物：${title}`,
+    parts: proposalParts,
   });
   await turns.settleTurn({
     conversationId: conversation.id,

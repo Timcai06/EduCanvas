@@ -21,9 +21,12 @@
  */
 
 import {
+  gatewayOperationEventExtensionsForCapabilities,
   gatewayInboundEnvelopeSchema,
   isGatewayTerminalEvent,
+  missingGatewayOperationEventExtensions,
   type GatewayInboundEnvelope,
+  type GatewayOperationEventExtension,
   type GatewayOperationEvent,
 } from '@educanvas/gateway-core';
 import { GatewayCancellationRegistry } from './cancellation';
@@ -44,6 +47,21 @@ const failurePayload = (
   retryable: code === 'RUNTIME_FAILED' || code === 'RATE_LIMITED',
 });
 
+function assertSupportedEventExtensions(
+  events: readonly GatewayOperationEvent[],
+  supportedExtensions: readonly GatewayOperationEventExtension[],
+): void {
+  if (
+    missingGatewayOperationEventExtensions(events, supportedExtensions).length >
+    0
+  ) {
+    throw new GatewayRuntimeError(
+      'CAPABILITY_UNAVAILABLE',
+      'Operation contains an event extension this client did not negotiate',
+    );
+  }
+}
+
 export class GatewayService {
   constructor(
     private readonly routeResolver: GatewayRouteResolverPort,
@@ -56,6 +74,9 @@ export class GatewayService {
 
   async *handle(rawEnvelope: unknown): AsyncIterable<GatewayOperationEvent> {
     const envelope = gatewayInboundEnvelopeSchema.parse(rawEnvelope);
+    const supportedExtensions = gatewayOperationEventExtensionsForCapabilities(
+      envelope.capabilities.capabilities,
+    );
     const route = await this.routeResolver.resolve({
       principal: envelope.principal,
       routeHint: envelope.routeHint,
@@ -81,11 +102,13 @@ export class GatewayService {
     });
 
     if (operation.replayed) {
-      for (const event of await this.operationStore.listEvents(
+      const events = await this.operationStore.listEvents(
         operation.operationId,
         -1,
         route.actorUserId,
-      )) {
+      );
+      assertSupportedEventExtensions(events, supportedExtensions);
+      for (const event of events) {
         yield event.type === 'message.started'
           ? { ...event, replayed: true }
           : event;
@@ -140,6 +163,22 @@ export class GatewayService {
           break;
         }
         if (step.done) break;
+        if (
+          missingGatewayOperationEventExtensions(
+            [step.value],
+            supportedExtensions,
+          ).length > 0
+        ) {
+          /* Never send a strict v1 client an extension it did not declare. */
+          void iterator.return?.(undefined)?.catch(() => undefined);
+          terminalSeen = true;
+          yield await this.operationStore.append(
+            operation.operationId,
+            failurePayload('CAPABILITY_UNAVAILABLE'),
+            this.now(),
+          );
+          break;
+        }
         const event = await this.operationStore.append(
           operation.operationId,
           step.value,
@@ -242,13 +281,18 @@ export class GatewayService {
     operationId: string;
     afterSequence: number;
     principalUserId: string;
+    eventExtensions?: readonly GatewayOperationEventExtension[];
   }): Promise<readonly GatewayOperationEvent[]> {
-    return this.operationStore.listEvents(
+    /* Inspect the whole durable stream before slicing; otherwise a caller could
+       resume past an unsupported event and continue with a misleading cursor. */
+    const events = await this.operationStore.listEvents(
       input.operationId,
-      input.afterSequence,
+      -1,
       input.principalUserId,
       this.now(),
     );
+    assertSupportedEventExtensions(events, input.eventExtensions ?? []);
+    return events.filter((event) => event.sequence > input.afterSequence);
   }
 }
 

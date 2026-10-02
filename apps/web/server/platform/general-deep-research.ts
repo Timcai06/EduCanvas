@@ -33,6 +33,7 @@ export class DeepResearchOutputGuard implements TurnApplicationOutputGuardPort {
     tool: 'webSearch',
     prompt:
       '深度研究刚才生成了回答，但没有调用任何外部研究工具。请先调用 webSearch 开始检索，并只依据后续实际搜索与读取结果撰写研究报告；如果搜索工具不可用或返回失败，说明无法完成研究。',
+    shouldAttempt: () => !this.hasValidReport(),
   };
 
   onToolResult(tool: string, result: ModelToolResult) {
@@ -65,6 +66,18 @@ export class DeepResearchOutputGuard implements TurnApplicationOutputGuardPort {
 
   constructor(private readonly progress: DeepResearchEvidenceProgress) {}
 
+  private hasValidReport() {
+    const markers = extractCitationMarkers(
+      this.held.join(''),
+      this.progress.sourceCount,
+    );
+    return (
+      this.progress.successfulSearchCount >= 3 &&
+      this.progress.sourceCount >= 5 &&
+      markers.length >= 5
+    );
+  }
+
   async push(delta: string) {
     // AgentLoop inserts a run separator even if an earlier draft was cleared.
     const safeDelta =
@@ -83,15 +96,7 @@ export class DeepResearchOutputGuard implements TurnApplicationOutputGuardPort {
   }
 
   async finish() {
-    const markers = extractCitationMarkers(
-      this.held.join(''),
-      this.progress.sourceCount,
-    );
-    if (
-      this.progress.successfulSearchCount < 3 ||
-      this.progress.sourceCount < 5 ||
-      markers.length < 5
-    ) {
+    if (!this.hasValidReport()) {
       return {
         kind: 'block' as const,
         publicContent: DEEP_RESEARCH_REQUIREMENTS_UNMET_MESSAGE,

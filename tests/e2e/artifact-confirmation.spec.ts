@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { randomUUID } from 'node:crypto';
 import {
   createArtifactConfirmationFixture,
   readArtifactConfirmation,
@@ -78,5 +79,62 @@ test('proposal can be edited, survives refresh, is scope-bound, and can be cance
   await page.reload();
   await expect(page.getByRole('region', { name: '确认产物类型' })).toHaveCount(
     0,
+  );
+});
+
+test('confirmation rematerializes the persisted source and ignores client refs', async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  await ensureGeneralNotebook(page);
+  const fixture = await createArtifactConfirmationFixture(
+    page,
+    '确认来源重物化验证',
+    { includeDocumentSource: true },
+  );
+
+  await page.goto(
+    `/notebook/${fixture.notebookId}/conversation/${fixture.conversationId}`,
+  );
+  const result = await page.evaluate(
+    async (input) => {
+      const controller = new AbortController();
+      const response = await fetch('/api/v1/chat/turn', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          clientMessageId: input.clientMessageId,
+          parts: [
+            { type: 'text', text: '请使用客户端试图替换的来源。' },
+            {
+              type: 'asset_ref',
+              reference: input.forgedReference,
+              usage: 'attachment',
+            },
+          ],
+          supportsArtifactConfirmation: true,
+          artifactConfirmationId: input.confirmationId,
+          outputPreference: 'interactive_artifact',
+        }),
+        signal: controller.signal,
+      });
+      controller.abort();
+      return response.status;
+    },
+    {
+      clientMessageId: `artifact.confirm.${fixture.confirmationId.replaceAll('-', '')}`,
+      confirmationId: fixture.confirmationId,
+      forgedReference: {
+        assetId: randomUUID(),
+        versionId: randomUUID(),
+        kind: 'document',
+      },
+    },
+  );
+
+  expect(result).toBe(200);
+  expect((await readArtifactConfirmation(fixture.confirmationId)).status).toBe(
+    'confirmed',
   );
 });

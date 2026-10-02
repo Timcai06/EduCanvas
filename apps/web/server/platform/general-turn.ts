@@ -102,6 +102,8 @@ export async function beginGatewayGeneralTurnApplication(input: {
   const artifactSourceReferences = collectArtifactInputSourceReferences(
     input.assetContext,
   );
+  const supportsArtifactConfirmation =
+    input.request.eventExtensions?.includes('artifact.confirmation@1') === true;
   const operationArtifacts = new WebOperationArtifacts({
     identity: input.identity,
     conversationId: input.route.conversationId,
@@ -126,7 +128,7 @@ export async function beginGatewayGeneralTurnApplication(input: {
         (input.request.outputPreference ?? 'auto') !== 'auto',
       allowArtifactConfirmation:
         (input.request.outputPreference ?? 'auto') === 'auto' &&
-        input.request.supportsArtifactConfirmation === true &&
+        supportsArtifactConfirmation &&
         input.request.mode !== 'deep_research',
       ...(researchCheckpoint ? { researchCheckpoint } : {}),
       ...(researchScope ? { researchScope } : {}),
@@ -155,7 +157,7 @@ export async function beginGatewayGeneralTurnApplication(input: {
       tools.nodeInvocations,
       input.route.membershipRole,
       tools.searchProgress,
-      input.request.supportsArtifactConfirmation === true &&
+      supportsArtifactConfirmation &&
         (input.request.outputPreference ?? 'auto') === 'auto' &&
         input.request.mode !== 'deep_research',
       input.confirmedArtifactKind ?? null,
