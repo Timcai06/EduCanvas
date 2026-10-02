@@ -8,7 +8,6 @@ import type {
   ToolKernelExecuteRequest,
   ToolKernelResult,
 } from './contracts';
-import { ToolOutcomeUnknownError } from './contracts';
 import {
   createExecutionControl,
   ToolCancelledError,
@@ -31,24 +30,30 @@ export async function invokeToolAdapter(input: {
     operationId: input.request.context.operationId,
     actorId: input.request.context.actorId,
   };
-  await input.callLedger.markRunning({ ...common, toolCallId: input.call.id });
-  const effect =
-    input.adapter.effect === 'write'
-      ? await input.effectLedger.intend({
-          ...common,
-          toolCallId: input.call.id,
-          effectKey: input.request.context.executionId,
-          semanticsHash: input.semanticsHash,
-          reconciliationVerifierId:
-            input.adapter.reconciliationVerifierId ?? null,
-        })
-      : null;
+  let effect: Awaited<ReturnType<ToolEffectLedgerPort['intend']>> | null = null;
+  let invocationStarted = false;
   const control = createExecutionControl(
     input.adapter.timeoutMs,
     input.request.signal,
   );
   const startedAt = Date.now();
   try {
+    await input.callLedger.markRunning({
+      ...common,
+      toolCallId: input.call.id,
+    });
+    effect =
+      input.adapter.effect === 'write'
+        ? await input.effectLedger.intend({
+            ...common,
+            toolCallId: input.call.id,
+            effectKey: input.request.context.executionId,
+            semanticsHash: input.semanticsHash,
+            reconciliationVerifierId:
+              input.adapter.reconciliationVerifierId ?? null,
+          })
+        : null;
+    invocationStarted = true;
     const output = await Promise.race([
       input.adapter.invoke(
         input.parsedInput,
@@ -94,6 +99,7 @@ export async function invokeToolAdapter(input: {
       ...input,
       common,
       effect,
+      invocationStarted,
       error,
       startedAt,
     });
@@ -109,44 +115,66 @@ async function settleInvocationFailure(input: {
   effectLedger: ToolEffectLedgerPort;
   common: { operationId: string; actorId: string };
   effect: Awaited<ReturnType<ToolEffectLedgerPort['intend']>> | null;
+  invocationStarted: boolean;
   error: unknown;
   startedAt: number;
 }): Promise<ToolKernelResult> {
+  // Once dispatch begins, an arbitrary adapter throw does not prove that a write
+  // had no external effect. Only pre-dispatch ledger failures are safe to classify
+  // as a known failure.
   const uncertainWrite =
-    input.adapter.effect === 'write' &&
-    (input.error instanceof ToolTimeoutError ||
-      input.error instanceof ToolCancelledError ||
-      input.error instanceof ToolOutcomeUnknownError);
+    input.adapter.effect === 'write' && input.invocationStarted;
+  // Settle both ledgers independently: one unavailable store must not prevent
+  // the other from recording the known or uncertain outcome.
   if (input.effect) {
-    await input.effectLedger.settle({
-      ...input.common,
-      effectId: input.effect.effect.id,
-      status: uncertainWrite ? 'outcome_unknown' : 'failed',
-      code: uncertainWrite ? 'write_outcome_unknown' : 'tool_failed',
-    });
+    try {
+      await input.effectLedger.settle({
+        ...input.common,
+        effectId: input.effect.effect.id,
+        status: uncertainWrite ? 'outcome_unknown' : 'failed',
+        code: uncertainWrite ? 'write_outcome_unknown' : 'ledger_unavailable',
+      });
+    } catch {
+      // The result below remains conservative even when durable settlement fails.
+    }
   }
-  await input.callLedger.settle({
-    ...input.common,
-    toolCallId: input.call.id,
-    status: uncertainWrite ? 'outcome_unknown' : 'failed',
-    code: uncertainWrite
-      ? 'write_outcome_unknown'
-      : input.error instanceof ToolTimeoutError
-        ? 'tool_timeout'
-        : input.error instanceof ToolCancelledError
-          ? 'tool_cancelled'
-          : 'tool_failed',
-    retryable:
-      !uncertainWrite &&
-      (input.error instanceof ToolTimeoutError ||
-        input.error instanceof ToolCancelledError),
-    durationMs: Date.now() - input.startedAt,
-  });
+  try {
+    await input.callLedger.settle({
+      ...input.common,
+      toolCallId: input.call.id,
+      status: uncertainWrite ? 'outcome_unknown' : 'failed',
+      code: uncertainWrite
+        ? 'write_outcome_unknown'
+        : !input.invocationStarted
+          ? 'ledger_unavailable'
+          : input.error instanceof ToolTimeoutError
+            ? 'tool_timeout'
+            : input.error instanceof ToolCancelledError
+              ? 'tool_cancelled'
+              : 'tool_failed',
+      retryable:
+        input.invocationStarted &&
+        !uncertainWrite &&
+        (input.error instanceof ToolTimeoutError ||
+          input.error instanceof ToolCancelledError),
+      durationMs: Date.now() - input.startedAt,
+    });
+  } catch {
+    // Never let ledger availability turn a dispatched write into a retryable result.
+  }
   if (uncertainWrite) {
     return toolFailure(
       input.adapter.name,
       'outcome_unknown',
       'write_outcome_unknown',
+      false,
+    );
+  }
+  if (!input.invocationStarted) {
+    return toolFailure(
+      input.adapter.name,
+      'failed',
+      'ledger_unavailable',
       false,
     );
   }

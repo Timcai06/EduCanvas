@@ -28,7 +28,8 @@ import {
   profile,
 } from './turn-application.test-support';
 
-type Behavior = 'success' | 'throw' | 'approval' | 'outcome_unknown';
+type Behavior =
+  'success' | 'throw' | 'write_throw' | 'approval' | 'outcome_unknown';
 function fixture(
   behaviors: Behavior[],
   observe?: (results: readonly ModelToolResult[]) => void,
@@ -56,7 +57,9 @@ function fixture(
             : 'l0',
       exposure: 'model',
       effect:
-        behavior === 'outcome_unknown' || behavior === 'approval'
+        behavior === 'write_throw' ||
+        behavior === 'outcome_unknown' ||
+        behavior === 'approval'
           ? 'write'
           : 'read',
       timeoutMs: 100,
@@ -70,6 +73,8 @@ function fixture(
       invoke() {
         invocations.push(`run${index}`);
         if (behavior === 'throw') throw new Error('private_scope_mismatch');
+        if (behavior === 'write_throw')
+          throw new Error('private_write_transport_detail');
         if (behavior === 'outcome_unknown')
           throw new ToolOutcomeUnknownError('private_write_receipt');
         return { value: `trusted-${index}` };
@@ -344,5 +349,34 @@ describe('actual ToolKernel + AgentLoop batch facts', () => {
     });
     expect(input.received).toHaveLength(1);
     expect(JSON.stringify(events)).not.toContain('private_write_receipt');
+  });
+
+  it('treats an ordinary write adapter exception as unknown and preserves the successful prefix', async () => {
+    const input = fixture(['success', 'write_throw', 'success']);
+    const events = await collect(input.service);
+
+    expect(toolEvents(events).map((event) => event.type)).toEqual([
+      'tool.started',
+      'tool.completed',
+      'tool.started',
+      'tool.failed',
+    ]);
+    expect(input.invocations).toEqual(['run0', 'run1']);
+    expect([...input.calls.calls.values()].map((call) => call.status)).toEqual([
+      'succeeded',
+      'outcome_unknown',
+    ]);
+    expect([...input.effects.effects.values()]).toMatchObject([
+      { status: 'outcome_unknown', code: 'write_outcome_unknown' },
+    ]);
+    expect(events.at(-1)).toMatchObject({
+      type: 'turn.failed',
+      code: 'TOOL_FAILED',
+      retryable: false,
+    });
+    expect(input.received).toHaveLength(1);
+    expect(JSON.stringify(events)).not.toContain(
+      'private_write_transport_detail',
+    );
   });
 });

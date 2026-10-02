@@ -9,7 +9,7 @@ import {
 
 describe('Tool invocation failure audit semantics', () => {
   it.each(['read', 'write'] as const)(
-    'ordinary %s throw is non-retryable in both ledger and Kernel without reading raw details',
+    'ordinary %s throw is classified safely in both ledger and Kernel without reading raw details',
     async (effect) => {
       const calls = new MemoryCallLedger();
       const effects = new MemoryEffectLedger();
@@ -42,29 +42,43 @@ describe('Tool invocation failure audit semantics', () => {
         arguments: { value: 'fixture' },
         context: context(`ordinary-${effect}`),
       });
-      expect(result).toMatchObject({
-        status: 'failed',
-        code: 'tool_failed',
-        retryable: false,
-      });
+      expect(result).toMatchObject(
+        effect === 'write'
+          ? {
+              status: 'outcome_unknown',
+              code: 'write_outcome_unknown',
+              retryable: false,
+            }
+          : { status: 'failed', code: 'tool_failed', retryable: false },
+      );
       expect(settled).toHaveBeenCalledWith(
         expect.objectContaining({
-          status: 'failed',
-          code: 'tool_failed',
+          status: effect === 'write' ? 'outcome_unknown' : 'failed',
+          code: effect === 'write' ? 'write_outcome_unknown' : 'tool_failed',
           retryable: false,
         }),
       );
       expect(calls.calls.size).toBe(1);
-      expect([...calls.calls.values()][0]).toMatchObject({
-        status: 'failed',
-        code: 'tool_failed',
-      });
+      expect([...calls.calls.values()][0]).toMatchObject(
+        effect === 'write'
+          ? {
+              status: 'outcome_unknown',
+              code: 'write_outcome_unknown',
+            }
+          : { status: 'failed', code: 'tool_failed' },
+      );
       expect(invoke).toHaveBeenCalledTimes(1);
-      if (effect === 'write')
-        expect([...effects.effects.values()][0]).toMatchObject({
-          status: 'failed',
-          code: 'tool_failed',
+      if (effect === 'write') {
+        expect([...calls.calls.values()][0]).toMatchObject({
+          status: 'outcome_unknown',
+          code: 'write_outcome_unknown',
+          retryable: false,
         });
+        expect([...effects.effects.values()][0]).toMatchObject({
+          status: 'outcome_unknown',
+          code: 'write_outcome_unknown',
+        });
+      }
       for (const reader of readers) expect(reader).not.toHaveBeenCalled();
       expect(JSON.stringify(result)).not.toContain('private_scope_mismatch');
     },

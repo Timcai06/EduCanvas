@@ -1,7 +1,13 @@
 import type { WebRuntimeSessionState } from '@educanvas/canvas-protocol';
 
 export type PersistentRuntimeState =
-  'starting' | 'running' | 'succeeded' | 'failed' | 'cancelled';
+  | 'starting'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'offline'
+  | 'unavailable'
+  | 'cancelled';
 
 export function resolveCancelFailure(
   current: PersistentRuntimeState,
