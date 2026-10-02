@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { lessonSessions } from './schema';
 import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
 import { createUnifiedMessageHistoryFixture } from './unified-message-history.integration-fixture';
 import {
@@ -22,6 +24,40 @@ const {
 
 describeWithDatabase('统一消息历史访问与分页', () => {
   installDatabaseHooks();
+
+  it('首次写入绑定真实 Notebook、Conversation 和主体，之后不能重挂', async () => {
+    await seedOwnerIdentity();
+    const original = await createConversationWithMembership(ownerUserId);
+    const other = await createConversationWithMembership(
+      ownerUserId,
+      '其他笔记本',
+    );
+    const sessionId = await createK12Session(original.id);
+    const readScope = async () =>
+      (
+        await getDatabase()
+          .select({
+            notebookId: lessonSessions.notebookId,
+            conversationId: lessonSessions.conversationId,
+            studentId: lessonSessions.studentId,
+          })
+          .from(lessonSessions)
+          .where(eq(lessonSessions.id, sessionId))
+      )[0];
+    const scope = {
+      notebookId: original.spaceId,
+      conversationId: original.id,
+      studentId: ownerUserId,
+    };
+    expect(await readScope()).toEqual(scope);
+    await expect(
+      getDatabase()
+        .update(lessonSessions)
+        .set({ notebookId: other.spaceId, conversationId: other.id })
+        .where(eq(lessonSessions.id, sessionId)),
+    ).rejects.toMatchObject({ cause: { code: '23514' } });
+    expect(await readScope()).toEqual(scope);
+  });
 
   describe('跨用户、跨 Notebook 拒绝', () => {
     it('无 Notebook 访问权限时抛出统一错误', async () => {

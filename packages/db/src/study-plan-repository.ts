@@ -2,11 +2,16 @@ import {
   learnerGradeBandSchema,
   learnerProfileDeclarationSchema,
   studyCourseDefinitionSchema,
-  teachingPreferencesSchema,
-  type DiagnosticObjectiveProgress,
 } from '@educanvas/teaching-core';
-import { and, asc, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull, or, sql } from 'drizzle-orm';
 import { getDb } from './client';
+import { NotebookAccessNotFoundError } from './notebook-access';
+import { lockLearningNotebookAuthority } from './learning-session-notebook-scope';
+import {
+  loadActiveNotebookStudyPlan,
+  loadPlanByGoal,
+  readNotebookStudyResumeCandidate,
+} from './study-plan-context';
 import { enqueueCourseKnowledgePublication } from './course-knowledge-publication';
 import {
   conversations,
@@ -15,8 +20,6 @@ import {
   spaces,
 } from './schema';
 import {
-  diagnosticAttempts,
-  diagnosticResponses,
   learnerProfiles,
   learningGoals,
   learningObjectives,
@@ -32,147 +35,6 @@ type DatabaseTransaction = Parameters<
   Parameters<Database['transaction']>[0]
 >[0];
 type DatabaseExecutor = Database | DatabaseTransaction;
-async function loadLatestDiagnostic(
-  executor: DatabaseExecutor,
-  goalId: string,
-  objectives: StudyPlanSnapshot['objectives'],
-): Promise<DiagnosticAttemptSnapshot | null> {
-  const [attempt] = await executor
-    .select()
-    .from(diagnosticAttempts)
-    .where(eq(diagnosticAttempts.goalId, goalId))
-    .orderBy(desc(diagnosticAttempts.submittedAt), desc(diagnosticAttempts.id))
-    .limit(1);
-  if (!attempt) return null;
-  const responses = await executor
-    .select({
-      objectiveId: diagnosticResponses.objectiveId,
-      isCorrect: diagnosticResponses.isCorrect,
-    })
-    .from(diagnosticResponses)
-    .where(eq(diagnosticResponses.attemptId, attempt.id));
-  const responseByObjective = new Map(
-    responses.map((response) => [response.objectiveId, response]),
-  );
-  const progress: DiagnosticObjectiveProgress[] = objectives.map(
-    (objective) => {
-      const response = responseByObjective.get(objective.id);
-      return {
-        objectiveKey: objective.objectiveKey,
-        knowledgeNodeId: objective.knowledgeNodeId,
-        title: objective.title,
-        status: response
-          ? response.isCorrect
-            ? 'strength'
-            : 'focus'
-          : 'not_started',
-        attemptedItems: response ? 1 : 0,
-        correctItems: response?.isCorrect ? 1 : 0,
-      };
-    },
-  );
-  const nextObjective =
-    progress.find((objective) => objective.status === 'focus') ??
-    progress.find((objective) => objective.status === 'not_started') ??
-    null;
-  return {
-    id: attempt.id,
-    clientAttemptId: attempt.clientAttemptId,
-    definitionVersion: attempt.definitionVersion,
-    attemptedItems: attempt.attemptedItems,
-    correctItems: attempt.correctItems,
-    submittedAt: attempt.submittedAt.toISOString(),
-    progress,
-    nextObjectiveKey: nextObjective?.objectiveKey ?? null,
-  };
-}
-
-async function loadPlanByGoal(
-  executor: DatabaseExecutor,
-  trustedStudentId: string,
-  goalId: string,
-): Promise<StudyPlanSnapshot | null> {
-  const [goal] = await executor
-    .select()
-    .from(learningGoals)
-    .where(
-      and(
-        eq(learningGoals.id, goalId),
-        eq(learningGoals.studentId, trustedStudentId),
-      ),
-    )
-    .limit(1);
-  if (!goal) return null;
-  const [profile] = await executor
-    .select()
-    .from(learnerProfiles)
-    .where(eq(learnerProfiles.studentId, trustedStudentId))
-    .limit(1);
-  if (!profile) return null;
-  const [session] = await executor
-    .select({ id: lessonSessions.id })
-    .from(lessonSessions)
-    .innerJoin(
-      conversations,
-      eq(conversations.id, lessonSessions.conversationId),
-    )
-    .where(
-      and(
-        eq(conversations.spaceId, goal.notebookId),
-        eq(lessonSessions.studentId, trustedStudentId),
-        eq(lessonSessions.status, 'active'),
-      ),
-    )
-    .orderBy(desc(lessonSessions.lastActivityAt), desc(lessonSessions.id))
-    .limit(1);
-  if (!session) return null;
-  const objectiveRows = await executor
-    .select()
-    .from(learningObjectives)
-    .where(eq(learningObjectives.goalId, goal.id))
-    .orderBy(asc(learningObjectives.sequence));
-  const objectives = objectiveRows.map((objective) => ({
-    id: objective.id,
-    objectiveKey: objective.objectiveKey,
-    knowledgeNodeId: objective.knowledgeNodeId,
-    title: objective.title,
-    description: objective.description,
-    sequence: objective.sequence,
-    prerequisiteObjectiveKeys: objective.prerequisiteObjectiveKeys,
-  }));
-  const parsedProfile = learnerProfileDeclarationSchema.parse({
-    ageBand: profile.ageBand,
-    gradeBand: profile.defaultGradeBand,
-    declarationSource: profile.declarationSource,
-    preferences: teachingPreferencesSchema.parse(profile.preferences),
-  });
-  const status = goal.status as 'active' | 'completed' | 'archived';
-  return {
-    profile: {
-      studentId: profile.studentId,
-      declaredByUserId: profile.declaredByUserId,
-      ...parsedProfile,
-      version: profile.version,
-      updatedAt: profile.updatedAt.toISOString(),
-    },
-    goal: {
-      id: goal.id,
-      notebookId: goal.notebookId,
-      studentId: goal.studentId,
-      sessionId: session.id,
-      courseSlug: goal.courseSlug,
-      courseVersion: goal.courseVersion,
-      gradeBand: learnerGradeBandSchema.parse(goal.gradeBand),
-      topic: goal.topic,
-      desiredOutcome: goal.desiredOutcome,
-      status,
-      version: goal.version,
-    },
-    objectives,
-    latestDiagnostic: await loadLatestDiagnostic(executor, goal.id, objectives),
-  };
-}
-
 async function upsertProfile(
   transaction: DatabaseTransaction,
   input: BootstrapStudyPlanInput,
@@ -222,9 +84,11 @@ async function upsertProfile(
 
 /** 学习者画像与Notebook Goal/Objectives的服务端权威仓储。 */
 export class DrizzleStudyPlanRepository {
-  constructor(private readonly providedDatabase?: Database) {}
+  constructor(
+    private readonly providedDatabase?: Database | DatabaseTransaction,
+  ) {}
 
-  private get database(): Database {
+  private get database(): Database | DatabaseTransaction {
     return this.providedDatabase ?? getDb();
   }
 
@@ -234,6 +98,29 @@ export class DrizzleStudyPlanRepository {
       throw new Error('学习者年级与课程目录不匹配');
     }
     return this.database.transaction(async (transaction) => {
+      const [selected] = await transaction
+        .select({ notebookId: lessonSessions.notebookId })
+        .from(lessonSessions)
+        .where(
+          and(
+            eq(lessonSessions.id, input.sessionId),
+            eq(lessonSessions.studentId, input.trustedStudentId),
+          ),
+        )
+        .limit(1);
+      if (!selected?.notebookId) throw new StudyPlanNotFoundError();
+      try {
+        await lockLearningNotebookAuthority(
+          transaction,
+          selected.notebookId,
+          input.trustedStudentId,
+          'notebook.manage',
+        );
+      } catch (error) {
+        if (error instanceof NotebookAccessNotFoundError)
+          throw new StudyPlanNotFoundError();
+        throw error;
+      }
       await transaction.execute(
         sql`select pg_advisory_xact_lock(hashtextextended(${`study-plan:${input.trustedStudentId}`}, 0))`,
       );
@@ -241,6 +128,7 @@ export class DrizzleStudyPlanRepository {
       const [ownedSession] = await transaction
         .select({
           notebookId: conversations.spaceId,
+          sessionNotebookId: lessonSessions.notebookId,
           gradeBand: lessonSessions.gradeBand,
           courseSlug: lessonSessions.courseSlug,
           knowledgeNodeId: lessonSessions.knowledgeNodeId,
@@ -279,6 +167,7 @@ export class DrizzleStudyPlanRepository {
         .for('update', { of: notebookMemberships });
       if (
         !ownedSession ||
+        ownedSession.sessionNotebookId !== ownedSession.notebookId ||
         ownedSession.gradeBand !== course.gradeBand ||
         ownedSession.courseSlug !== course.courseSlug ||
         ownedSession.knowledgeNodeId !== course.objectives[0]?.knowledgeNodeId
@@ -351,6 +240,9 @@ export class DrizzleStudyPlanRepository {
         transaction,
         input.trustedStudentId,
         goalId,
+        undefined,
+        false,
+        input.sessionId,
       );
       if (!snapshot) throw new Error('学习计划写入后无法读取');
       return snapshot;
@@ -361,7 +253,7 @@ export class DrizzleStudyPlanRepository {
     trustedStudentId: string,
   ): Promise<StudyPlanSnapshot | null> {
     const [goal] = await this.database
-      .select({ id: learningGoals.id })
+      .select({ id: learningGoals.id, sessionId: lessonSessions.id })
       .from(learningGoals)
       .innerJoin(
         conversations,
@@ -376,6 +268,9 @@ export class DrizzleStudyPlanRepository {
           eq(learningGoals.studentId, trustedStudentId),
           eq(learningGoals.status, 'active'),
           eq(lessonSessions.studentId, trustedStudentId),
+          eq(lessonSessions.notebookId, learningGoals.notebookId),
+          eq(lessonSessions.courseSlug, learningGoals.courseSlug),
+          eq(lessonSessions.gradeBand, learningGoals.gradeBand),
           eq(lessonSessions.status, 'active'),
           eq(conversations.status, 'active'),
         ),
@@ -389,8 +284,42 @@ export class DrizzleStudyPlanRepository {
       )
       .limit(1);
     return goal
-      ? loadPlanByGoal(this.database, trustedStudentId, goal.id)
+      ? loadPlanByGoal(
+          this.database,
+          trustedStudentId,
+          goal.id,
+          undefined,
+          false,
+          goal.sessionId,
+        )
       : null;
+  }
+
+  /** Explicit Notebook selection never falls back to another Notebook's active course. */
+  async getActiveForNotebook(
+    trustedStudentId: string,
+    notebookId: string,
+    conversationId?: string,
+    includeArchived = false,
+  ): Promise<StudyPlanSnapshot | null> {
+    return loadActiveNotebookStudyPlan(
+      this.database,
+      trustedStudentId,
+      notebookId,
+      conversationId,
+      includeArchived,
+    );
+  }
+
+  readNotebookStudyResumeCandidate(
+    trustedStudentId: string,
+    notebookId: string,
+  ) {
+    return readNotebookStudyResumeCandidate(
+      this.database,
+      trustedStudentId,
+      notebookId,
+    );
   }
 
   async getOwnedBySession(
@@ -398,7 +327,7 @@ export class DrizzleStudyPlanRepository {
     sessionId: string,
   ): Promise<StudyPlanSnapshot | null> {
     const [goal] = await this.database
-      .select({ id: learningGoals.id })
+      .select({ id: learningGoals.id, sessionId: lessonSessions.id })
       .from(learningGoals)
       .innerJoin(
         conversations,
@@ -414,11 +343,21 @@ export class DrizzleStudyPlanRepository {
           eq(learningGoals.status, 'active'),
           eq(lessonSessions.id, sessionId),
           eq(lessonSessions.studentId, trustedStudentId),
+          eq(lessonSessions.notebookId, learningGoals.notebookId),
+          eq(lessonSessions.courseSlug, learningGoals.courseSlug),
+          eq(lessonSessions.gradeBand, learningGoals.gradeBand),
         ),
       )
       .limit(1);
     return goal
-      ? loadPlanByGoal(this.database, trustedStudentId, goal.id)
+      ? loadPlanByGoal(
+          this.database,
+          trustedStudentId,
+          goal.id,
+          undefined,
+          false,
+          goal.sessionId,
+        )
       : null;
   }
 }

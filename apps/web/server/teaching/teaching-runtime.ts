@@ -19,6 +19,7 @@ import 'server-only';
 import {
   DrizzleArtifactRepository,
   DrizzleTeachingUnitOfWork,
+  type NotebookStudySubmissionScope,
 } from '@educanvas/db';
 import {
   GradeCanvasSubmissionService,
@@ -51,3 +52,27 @@ export const progressTeachingStateService = new ProgressTeachingStateService(
     },
   },
 );
+
+/** Scoped first-party pages use the same grading services with a transactional authority guard. */
+export function createNotebookTeachingRuntime(
+  scope: NotebookStudySubmissionScope,
+) {
+  const unitOfWork = new DrizzleTeachingUnitOfWork(undefined, scope);
+  return {
+    gradeCanvasSubmissionService: new GradeCanvasSubmissionService(
+      artifactRepository,
+      unitOfWork,
+    ),
+    progressTeachingStateService: new ProgressTeachingStateService(unitOfWork, {
+      async getPolicy() {
+        return {
+          policyVersion: 'k12-demo-progression-v1',
+          minimumPracticeEvents: 1,
+          remediationTarget: 'EXPLAIN' as const,
+          prerequisiteScores: [],
+          severeMisconceptions: [],
+        };
+      },
+    }),
+  };
+}

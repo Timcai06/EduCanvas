@@ -1,3 +1,14 @@
+import {
+  toConversation,
+  toMessage,
+  type PlatformConversationSnapshot,
+  type PlatformMessageSnapshot,
+} from './platform-conversation-projection';
+export type {
+  PlatformConversationSnapshot,
+  PlatformMessageSnapshot,
+} from './platform-conversation-projection';
+import { PlatformNotebookDirectory } from './platform-notebook-directory';
 import type { NotebookPermission } from '@educanvas/gateway-core';
 import { and, asc, desc, eq, gt, isNull, lt, or } from 'drizzle-orm';
 import { getDb } from './client';
@@ -20,32 +31,6 @@ type Database = ReturnType<typeof getDb>;
 type TransactionCallback = Parameters<Database['transaction']>[0];
 type DatabaseTransaction = Parameters<TransactionCallback>[0];
 type DatabaseExecutor = Database | DatabaseTransaction;
-export interface PlatformConversationSnapshot {
-  id: string;
-  spaceId: string;
-  ownerSubjectId: string;
-  agentProfileId: string;
-  title: string | null;
-  status: 'active' | 'archived';
-  lastActivityAt: string;
-}
-
-export interface PlatformMessageSnapshot {
-  id: string;
-  conversationId: string;
-  role: 'system' | 'user' | 'assistant' | 'tool';
-  status:
-    | 'pending'
-    | 'streaming'
-    | 'completed'
-    | 'failed'
-    | 'cancelled'
-    | 'interrupted';
-  content: string;
-  createdAt: string;
-  completedAt: string | null;
-}
-
 export class PlatformConversationOwnershipError extends Error {
   readonly code = 'conversation_not_found';
 
@@ -53,34 +38,6 @@ export class PlatformConversationOwnershipError extends Error {
     super('Conversation不存在或不属于当前主体');
     this.name = 'PlatformConversationOwnershipError';
   }
-}
-
-function toConversation(
-  row: typeof conversations.$inferSelect,
-): PlatformConversationSnapshot {
-  return {
-    id: row.id,
-    spaceId: row.spaceId,
-    ownerSubjectId: row.ownerSubjectId,
-    agentProfileId: row.agentProfileId,
-    title: row.title,
-    status: row.status as PlatformConversationSnapshot['status'],
-    lastActivityAt: row.lastActivityAt.toISOString(),
-  };
-}
-
-function toMessage(
-  row: typeof conversationMessages.$inferSelect,
-): PlatformMessageSnapshot {
-  return {
-    id: row.id,
-    conversationId: row.conversationId,
-    role: row.role as PlatformMessageSnapshot['role'],
-    status: row.status as PlatformMessageSnapshot['status'],
-    content: row.content,
-    createdAt: row.createdAt.toISOString(),
-    completedAt: row.completedAt?.toISOString() ?? null,
-  };
 }
 
 async function requireConversationAccess(
@@ -119,6 +76,33 @@ export class DrizzlePlatformConversationRepository {
 
   private get database(): Database {
     return this.providedDatabase ?? getDb();
+  }
+
+  private get notebooks() {
+    return new PlatformNotebookDirectory(this.database);
+  }
+  getNotebook(input: Parameters<PlatformNotebookDirectory['getNotebook']>[0]) {
+    return this.notebooks.getNotebook(input);
+  }
+  listNotebooks(
+    input: Parameters<PlatformNotebookDirectory['listNotebooks']>[0],
+  ) {
+    return this.notebooks.listNotebooks(input);
+  }
+  async listInNotebook(
+    input: Parameters<PlatformNotebookDirectory['listInNotebook']>[0],
+  ) {
+    return (await this.notebooks.listInNotebook(input)).map(toConversation);
+  }
+  async createInNotebook(
+    input: Parameters<PlatformNotebookDirectory['createInNotebook']>[0],
+  ) {
+    return toConversation(await this.notebooks.createInNotebook(input));
+  }
+  renameNotebook(
+    input: Parameters<PlatformNotebookDirectory['renameNotebook']>[0],
+  ) {
+    return this.notebooks.renameNotebook(input);
   }
 
   async getOwned(input: {
@@ -238,7 +222,7 @@ export class DrizzlePlatformConversationRepository {
     });
   }
 
-  /** 原子同步一对一 Notebook 与主 Conversation 标题，并强制校验主体归属。 */
+  /** 只重命名所选 Conversation；Notebook 标题通过独立入口修改。 */
   async renameOwned(input: {
     conversationId: string;
     trustedSubjectId: string;
@@ -271,19 +255,12 @@ export class DrizzlePlatformConversationRepository {
         .returning();
       if (!renamed) throw new Error('Conversation重命名失败');
 
-      const [renamedSpace] = await transaction
-        .update(spaces)
-        .set({ title, updatedAt: now })
-        .where(and(eq(spaces.id, owned.spaceId), eq(spaces.status, 'active')))
-        .returning({ id: spaces.id });
-      if (!renamedSpace) throw new Error('Notebook Space重命名失败');
       await appendSecurityAuditEvent(transaction, {
         actorUserId: input.trustedSubjectId,
-        eventType: 'notebook.renamed',
-        resourceType: 'notebook',
-        resourceId: owned.spaceId,
+        eventType: 'conversation.renamed',
+        resourceType: 'conversation',
+        resourceId: owned.id,
         outcome: 'succeeded',
-        metadata: { conversation_id: owned.id },
         occurredAt: now,
       });
       return toConversation(renamed);

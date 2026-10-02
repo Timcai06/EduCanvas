@@ -70,6 +70,8 @@ describeWithDatabase('学习Session失败补偿交错', () => {
     const sessions = new DrizzleLearningSessionRepository(getDatabase());
     const initial = await bootstrapPlan(studentId);
     const scope = scopeFor(studentId);
+    // Explicitly archived historical course is restored; new default Notebook never archives it.
+    await sessions.archive(scope, initial.session.sessionId);
     const orphan = await sessions.startNew({
       ...scope,
       completeArtifact: artifact,
@@ -94,11 +96,17 @@ describeWithDatabase('学习Session失败补偿交错', () => {
     });
   });
 
-  it('B成功后A孤儿补偿不恢复旧Session覆盖B', async () => {
+  it('B成功后A孤儿补偿保留各Notebook已有Session与Goal', async () => {
     const studentId = 'interleaved-study-student';
     const sessions = new DrizzleLearningSessionRepository(getDatabase());
     const initial = await bootstrapPlan(studentId);
     const scope = scopeFor(studentId);
+    const initialRow = (
+      await getDatabase()
+        .select()
+        .from(baseSchema.lessonSessions)
+        .where(eq(baseSchema.lessonSessions.id, initial.session.sessionId))
+    )[0];
 
     // A 新建 Session 后 Goal 写入失败；B 随后完成 Session + Goal。
     const orphanA = await sessions.startNew({
@@ -148,11 +156,28 @@ describeWithDatabase('学习Session失败补偿交错', () => {
       .from(baseSchema.lessonSessions);
     expect(rows).toEqual(
       expect.arrayContaining([
-        { id: initial.session.sessionId, status: 'archived' },
+        { id: initial.session.sessionId, status: 'active' },
         { id: successfulB.sessionId, status: 'active' },
       ]),
     );
     expect(rows.some((row) => row.id === orphanA.sessionId)).toBe(false);
+    expect(
+      (
+        await getDatabase()
+          .select()
+          .from(baseSchema.lessonSessions)
+          .where(eq(baseSchema.lessonSessions.id, initial.session.sessionId))
+      )[0],
+    ).toEqual(initialRow);
+    expect(planB.goal.notebookId).not.toBe(initial.plan.goal.notebookId);
+    expect(
+      (
+        await new DrizzleStudyPlanRepository(getDatabase()).getOwnedBySession(
+          studentId,
+          initial.session.sessionId,
+        )
+      )?.goal.id,
+    ).toBe(initial.plan.goal.id);
     expect(planB.goal.sessionId).toBe(successfulB.sessionId);
     await expect(
       new DrizzleStudyPlanRepository(getDatabase()).getOwnedBySession(

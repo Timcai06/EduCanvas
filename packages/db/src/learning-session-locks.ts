@@ -16,11 +16,13 @@ export interface LearningSessionLockScope {
   gradeBand: string;
   courseSlug: string;
   knowledgeNodeId: string;
+  notebookId?: string;
 }
 
 function scopeLockKey(scope: LearningSessionLockScope): string {
   return [
-    'lesson-session-scope-v2',
+    'lesson-session-scope-v3',
+    scope.notebookId ?? 'legacy-unbound',
     scope.studentId,
     scope.gradeBand,
     scope.courseSlug,
@@ -49,5 +51,8 @@ export function learningSessionScopeCondition(scope: LearningSessionLockScope) {
     eq(lessonSessions.gradeBand, scope.gradeBand),
     eq(lessonSessions.courseSlug, scope.courseSlug),
     eq(lessonSessions.knowledgeNodeId, scope.knowledgeNodeId),
+    scope.notebookId
+      ? eq(lessonSessions.notebookId, scope.notebookId)
+      : undefined,
   );
 }

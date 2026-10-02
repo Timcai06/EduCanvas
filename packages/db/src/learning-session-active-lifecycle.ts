@@ -1,5 +1,6 @@
+import { requireNotebookAccess } from './notebook-access';
 import { selectInitialState } from '@educanvas/teaching-core';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { isAnonymousSyntheticSubjectId } from './anonymous-data-lifecycle';
 import { ensurePersonalIdentity } from './gateway-repository';
 import {
@@ -20,6 +21,7 @@ export async function insertActiveLearningSession(
   transaction: DatabaseTransaction,
   scope: LearningSessionLockScope,
   now: Date,
+  notebookId?: string,
 ): Promise<string> {
   const [existingMastery] = await transaction
     .select({ studentId: masteryStates.studentId })
@@ -31,36 +33,47 @@ export async function insertActiveLearningSession(
       ),
     )
     .limit(1);
-  const [space] = await transaction
-    .insert(spaces)
-    .values({
-      ownerSubjectId: scope.studentId,
-      kind: 'course',
-      title: scope.courseSlug,
-      status: 'active',
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning({ id: spaces.id });
-  if (!space) throw new Error('学习Space写入失败');
-  const identity = await ensurePersonalIdentity(transaction, {
-    userId: scope.studentId,
-    kind: isAnonymousSyntheticSubjectId(scope.studentId)
-      ? 'anonymous_compat'
-      : 'registered',
-    now,
-  });
-  await transaction.insert(notebookMemberships).values({
-    notebookId: space.id,
-    userId: identity.userId,
-    role: 'owner',
-    grantedByUserId: identity.userId,
-    grantedAt: now,
-  });
+  let spaceId = notebookId;
+  if (notebookId) {
+    await requireNotebookAccess(transaction, {
+      notebookId,
+      trustedSubjectId: scope.studentId,
+      requiredPermission: 'notebook.manage',
+      now,
+    });
+  } else {
+    const [space] = await transaction
+      .insert(spaces)
+      .values({
+        ownerSubjectId: scope.studentId,
+        kind: 'course',
+        title: scope.courseSlug,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning({ id: spaces.id });
+    if (!space) throw new Error('学习Space写入失败');
+    const identity = await ensurePersonalIdentity(transaction, {
+      userId: scope.studentId,
+      kind: isAnonymousSyntheticSubjectId(scope.studentId)
+        ? 'anonymous_compat'
+        : 'registered',
+      now,
+    });
+    await transaction.insert(notebookMemberships).values({
+      notebookId: space.id,
+      userId: identity.userId,
+      role: 'owner',
+      grantedByUserId: identity.userId,
+      grantedAt: now,
+    });
+    spaceId = space.id;
+  }
   const [conversation] = await transaction
     .insert(conversations)
     .values({
-      spaceId: space.id,
+      spaceId: spaceId!,
       ownerSubjectId: scope.studentId,
       agentProfileId: 'k12.teacher',
       title: scope.courseSlug,
@@ -75,6 +88,7 @@ export async function insertActiveLearningSession(
     .insert(lessonSessions)
     .values({
       conversationId: conversation.id,
+      notebookId: spaceId!,
       studentId: scope.studentId,
       gradeBand: scope.gradeBand,
       courseSlug: scope.courseSlug,
@@ -103,6 +117,7 @@ export async function archiveActiveLearningSessionScope(
     .where(
       and(
         learningSessionScopeCondition(scope),
+        scope.notebookId ? undefined : isNull(lessonSessions.notebookId),
         eq(lessonSessions.status, 'active'),
         exceptSessionId
           ? sql`${lessonSessions.id} <> ${exceptSessionId}`

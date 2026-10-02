@@ -1,5 +1,6 @@
 import {
   check,
+  foreignKey,
   index,
   integer,
   jsonb,
@@ -13,6 +14,7 @@ import {
 import { sql } from 'drizzle-orm';
 import type { AssetVersionRepresentationIdentity } from '@educanvas/agent-core';
 import { platformUsers } from './identity';
+import { spaces } from './workspace';
 import { assetVersions, assets } from './asset';
 import { agentOperations, conversations } from './conversation';
 
@@ -26,6 +28,9 @@ export const lessonSessions = pgTable(
   'lesson_sessions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    notebookId: uuid('notebook_id').references(() => spaces.id, {
+      onDelete: 'restrict',
+    }),
     conversationId: uuid('conversation_id').references(() => conversations.id, {
       onDelete: 'restrict',
     }),
@@ -59,14 +64,35 @@ export const lessonSessions = pgTable(
   },
   (table) => [
     index('lesson_sessions_conversation_fk_idx').on(table.conversationId),
-    uniqueIndex('lesson_sessions_active_scope_unique')
+    uniqueIndex('lesson_sessions_active_notebook_scope_unique')
+      .on(
+        table.notebookId,
+        table.studentId,
+        table.gradeBand,
+        table.courseSlug,
+        sql`coalesce(${table.knowledgeNodeId}, '')`,
+      )
+      .where(
+        sql`${table.status} = 'active' and ${table.notebookId} is not null`,
+      ),
+    uniqueIndex('lesson_sessions_active_unbound_scope_unique')
       .on(
         table.studentId,
         table.gradeBand,
         table.courseSlug,
         sql`coalesce(${table.knowledgeNodeId}, '')`,
       )
-      .where(sql`${table.status} = 'active'`),
+      .where(sql`${table.status} = 'active' and ${table.notebookId} is null`),
+    index('lesson_sessions_notebook_fk_idx').on(table.notebookId),
+    foreignKey({
+      columns: [table.conversationId, table.notebookId],
+      foreignColumns: [conversations.id, conversations.spaceId],
+      name: 'lesson_sessions_conversation_notebook_fk',
+    }).onDelete('restrict'),
+    check(
+      'lesson_sessions_notebook_pair_check',
+      sql`(${table.conversationId} is null and ${table.notebookId} is null) or (${table.conversationId} is not null and ${table.notebookId} is not null)`,
+    ),
     uniqueIndex('lesson_sessions_id_student_unique').on(
       table.id,
       table.studentId,

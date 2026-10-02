@@ -6,6 +6,7 @@ import {
   type LearningSessionLockScope,
 } from './learning-session-locks';
 import { lessonSessions } from './schema';
+import { resolveLearningSessionNotebookScope } from './learning-session-notebook-scope';
 
 type Database = ReturnType<typeof getDb>;
 
@@ -17,25 +18,33 @@ export type ConditionalSessionRestoreResult =
  * 结果由公开仓储转换为 boolean 或所有权收敛后的 not-found 错误。
  */
 export async function restoreArchivedSessionIfScopeVacant(
-  database: Database,
+  database: Database | Parameters<Parameters<Database['transaction']>[0]>[0],
   scope: LearningSessionLockScope,
   sessionId: string,
   activeSessionCutoff: Date,
 ): Promise<ConditionalSessionRestoreResult> {
   const now = new Date();
   return database.transaction(async (transaction) => {
-    await lockLearningSessionScope(transaction, scope);
+    const selectedScope = await resolveLearningSessionNotebookScope(
+      transaction,
+      scope,
+      sessionId,
+      true,
+    );
+    if (!selectedScope) return 'target_not_found';
+    await lockLearningSessionScope(transaction, selectedScope);
     const [target] = await transaction
       .select({ id: lessonSessions.id })
       .from(lessonSessions)
       .where(
         and(
           eq(lessonSessions.id, sessionId),
-          learningSessionScopeCondition(scope),
+          learningSessionScopeCondition(selectedScope),
           gte(lessonSessions.lastActivityAt, activeSessionCutoff),
         ),
       )
-      .limit(1);
+      .limit(1)
+      .for('update');
     if (!target) return 'target_not_found';
 
     const [active] = await transaction
@@ -43,7 +52,7 @@ export async function restoreArchivedSessionIfScopeVacant(
       .from(lessonSessions)
       .where(
         and(
-          learningSessionScopeCondition(scope),
+          learningSessionScopeCondition(selectedScope),
           eq(lessonSessions.status, 'active'),
         ),
       )
@@ -56,7 +65,7 @@ export async function restoreArchivedSessionIfScopeVacant(
       .where(
         and(
           eq(lessonSessions.id, sessionId),
-          learningSessionScopeCondition(scope),
+          learningSessionScopeCondition(selectedScope),
           eq(lessonSessions.status, 'archived'),
         ),
       )

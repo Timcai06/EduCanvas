@@ -11,10 +11,7 @@ import {
   conversationMessages,
   operationContinuations,
 } from '../schema';
-import {
-  findCurrentOperationAccess,
-  listCurrentGatewayOperationEvents,
-} from './operation-access';
+import { listScopedGatewayOperationEvents } from './operation-scoped-events';
 import {
   resolveGatewayApproval,
   type ResolveGatewayApprovalInput,
@@ -541,48 +538,15 @@ export class DrizzleGatewayOperationStore {
     afterSequence: number,
     actorUserId: string,
     now: Date = new Date(),
+    conversationId?: string,
   ): Promise<readonly GatewayOperationEvent[]> {
-    const access = await findCurrentOperationAccess(this.database, {
+    return listScopedGatewayOperationEvents(this.database, {
       operationId,
+      afterSequence,
       actorUserId,
-      requiredPermission: 'notebook.read',
       now,
-    });
-    if (!access) {
-      throw new GatewayPersistenceError(
-        'operation_not_found',
-        'Operation not found',
-      );
-    }
-    return this.database.transaction(async (transaction) => {
-      await transaction.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${`gateway-event-v1:${operationId}`}, 0))`,
-      );
-      const lockedAccess = await findCurrentOperationAccess(transaction, {
-        operationId,
-        actorUserId,
-        requiredPermission: 'notebook.read',
-        now,
-      });
-      if (!lockedAccess) {
-        throw new GatewayPersistenceError(
-          'operation_not_found',
-          'Operation not found',
-        );
-      }
-      if (this.terminalReconciliationMode === 'enabled') {
-        await reconcileGatewayTerminalWithinTransaction(
-          transaction,
-          operationId,
-          now,
-        );
-      }
-      return listCurrentGatewayOperationEvents(transaction, {
-        operationId,
-        afterSequence,
-        actorUserId,
-        now,
-      });
+      conversationId,
+      terminalReconciliationMode: this.terminalReconciliationMode,
     });
   }
 }

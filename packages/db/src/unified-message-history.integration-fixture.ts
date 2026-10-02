@@ -5,7 +5,9 @@ import postgres from 'postgres';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, beforeEach, describe } from 'vitest';
 import { DrizzlePlatformConversationRepository } from './conversation-platform-repository';
-import { DrizzleLearningSessionRepository } from './learning-session-repository';
+import { prepareArtifact } from '@educanvas/canvas-protocol/server';
+import { selectInitialState } from '@educanvas/teaching-core';
+import { ensurePreparedArtifact } from './artifact-repository';
 import * as schema from './schema';
 
 function resolveTestDatabaseUrl() {
@@ -30,7 +32,6 @@ export function createUnifiedMessageHistoryFixture() {
   const database = connection ? drizzle(connection, { schema }) : null;
   const ownerUserId = 'unified-history-owner';
   const otherUserId = 'unified-history-other';
-  const studentId = 'unified-history-student';
 
   function getDatabase() {
     if (!database) throw new Error('TEST_DATABASE_URL未设置');
@@ -119,38 +120,52 @@ export function createUnifiedMessageHistoryFixture() {
   }
 
   async function createK12Session(conversationId: string) {
-    const bootstrapped = await new DrizzleLearningSessionRepository(
-      getDatabase(),
-    ).bootstrap({
-      studentId,
-      gradeBand: 'middle_school',
-      courseSlug: 'test-course',
-      knowledgeNodeId: 'node-1',
-      completeArtifact: {
-        schemaVersion: '1',
-        artifactId: 'unified-history-quiz',
-        type: 'quiz',
-        title: '测试题',
-        params: {
-          questions: [
-            {
-              id: 'q1',
-              question: '问题一',
-              options: [
-                { id: 'a', text: '选项A' },
-                { id: 'b', text: '选项B' },
-              ],
-              correctOptionId: 'a',
-            },
-          ],
-        },
+    const prepared = prepareArtifact({
+      schemaVersion: '1',
+      artifactId: 'unified-history-quiz',
+      type: 'quiz',
+      title: '测试题',
+      params: {
+        questions: [
+          {
+            id: 'q1',
+            question: '问题一',
+            options: [
+              { id: 'a', text: '选项A' },
+              { id: 'b', text: '选项B' },
+            ],
+            correctOptionId: 'a',
+          },
+        ],
       },
     });
-    await getDatabase()
-      .update(schema.lessonSessions)
-      .set({ conversationId })
-      .where(eq(schema.lessonSessions.id, bootstrapped.sessionId));
-    return bootstrapped.sessionId;
+    return getDatabase().transaction(async (transaction) => {
+      const [conversation] = await transaction
+        .select({
+          notebookId: schema.conversations.spaceId,
+          studentId: schema.conversations.ownerSubjectId,
+        })
+        .from(schema.conversations)
+        .where(eq(schema.conversations.id, conversationId));
+      if (!conversation)
+        throw new Error('统一消息历史测试目标 Conversation 不存在');
+      // 两张历史消息表可合法挂载同一 Conversation；其 Notebook 归属在首次 INSERT 时冻结。
+      const [session] = await transaction
+        .insert(schema.lessonSessions)
+        .values({
+          notebookId: conversation.notebookId,
+          conversationId,
+          studentId: conversation.studentId,
+          gradeBand: 'middle_school',
+          courseSlug: 'test-course',
+          knowledgeNodeId: 'node-1',
+          state: selectInitialState(false),
+        })
+        .returning({ id: schema.lessonSessions.id });
+      if (!session) throw new Error('统一消息历史测试 Session 写入失败');
+      await ensurePreparedArtifact(transaction, session.id, prepared);
+      return session.id;
+    });
   }
 
   async function insertK12Message(

@@ -476,7 +476,7 @@ describeWithDatabase('对话与Model Run账本', () => {
     ).rejects.toBeInstanceOf(LearningSessionOwnershipError);
   });
 
-  it('新建、归档、恢复和课程级最近列表保持单active及所有权', async () => {
+  it('新建独立Notebook、同Notebook归档恢复与课程最近列表保持所有权', async () => {
     const sessions = new DrizzleLearningSessionRepository(getDatabase());
     const first = await sessions.bootstrap({ ...scope, completeArtifact });
     const firstBeforeResume = await getDatabase()
@@ -488,10 +488,15 @@ describeWithDatabase('对话与Model Run账本', () => {
     expect(
       await getDatabase().select().from(schema.lessonSessions),
     ).toMatchObject([
-      { id: first.sessionId, status: 'archived' },
+      { id: first.sessionId, status: 'active' },
       { id: second.sessionId, status: 'active' },
     ]);
 
+    const before = await getDatabase().select().from(schema.lessonSessions);
+    expect(before.find((r) => r.id === first.sessionId)?.notebookId).not.toBe(
+      before.find((r) => r.id === second.sessionId)?.notebookId,
+    );
+    await sessions.archive(scope, first.sessionId);
     await sessions.resume(scope, first.sessionId);
     const rowsAfterResume = await getDatabase()
       .select()
@@ -499,8 +504,11 @@ describeWithDatabase('对话与Model Run账本', () => {
     expect(rowsAfterResume).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ id: first.sessionId, status: 'active' }),
-        expect.objectContaining({ id: second.sessionId, status: 'archived' }),
+        expect.objectContaining({ id: second.sessionId, status: 'active' }),
       ]),
+    );
+    expect(rowsAfterResume.find((r) => r.id === second.sessionId)).toEqual(
+      before.find((r) => r.id === second.sessionId),
     );
     expect(
       rowsAfterResume

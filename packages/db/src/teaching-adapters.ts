@@ -15,6 +15,10 @@ import {
   type UpdateSessionStateInput,
 } from '@educanvas/teaching-core';
 import { getDb } from './client';
+import {
+  requireNotebookStudySubmissionScope,
+  type NotebookStudySubmissionScope,
+} from './notebook-study-submission-scope';
 import { learningEvents, lessonSessions, masteryStates } from './schema';
 
 type Database = ReturnType<typeof getDb>;
@@ -288,14 +292,22 @@ function createTeachingTransaction(
 
 /** PostgreSQL事务适配器，确保投影更新与可信事件追加同时提交或同时回滚。 */
 export class DrizzleTeachingUnitOfWork implements TeachingUnitOfWork {
-  constructor(private readonly providedDatabase?: Database) {}
+  constructor(
+    private readonly providedDatabase?: Database,
+    private readonly submissionScope?: NotebookStudySubmissionScope,
+  ) {}
 
   async run<Result>(
     operation: (transaction: TeachingTransaction) => Promise<Result>,
   ): Promise<Result> {
     const database = this.providedDatabase ?? getDb();
-    return database.transaction((transaction) =>
-      operation(createTeachingTransaction(transaction)),
-    );
+    return database.transaction(async (transaction) => {
+      if (this.submissionScope)
+        await requireNotebookStudySubmissionScope(
+          transaction,
+          this.submissionScope,
+        );
+      return operation(createTeachingTransaction(transaction));
+    });
   }
 }
