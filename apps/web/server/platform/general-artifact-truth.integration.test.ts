@@ -35,6 +35,7 @@ async function run(
     | 'event_without_validated_result'
     | 'created'
     | 'confirmed'
+    | 'confirmed_wrong_kind'
     | 'remediated'
     | 'remediated_tool_only',
 ) {
@@ -62,19 +63,26 @@ async function run(
   const repository = {
     createArtifactWithGenerationJob: vi.fn().mockResolvedValue({
       artifact:
-        scenario === 'confirmed' ? { ...artifact, kind: 'slides' } : artifact,
+        scenario === 'confirmed' || scenario === 'confirmed_wrong_kind'
+          ? { ...artifact, kind: 'slides' }
+          : artifact,
       job:
         scenario === 'event_without_validated_result'
           ? { ...job, id: 'invalid-job-id' }
           : job,
     }),
   };
+  const confirmedArtifactKind =
+    scenario === 'confirmed' || scenario === 'confirmed_wrong_kind'
+      ? 'slides'
+      : undefined;
   const artifacts = new WebOperationArtifacts(
     {
       identity: { token: 'fixture-token', studentId: command.actor.actorId },
       conversationId: command.notebook.conversationId,
       spaceId: command.notebook.notebookId,
       operationId: command.operationId,
+      confirmedArtifactKind,
     },
     repository,
   );
@@ -128,7 +136,12 @@ async function run(
           callId: 'call-artifact',
           tool: 'createCanvasArtifact',
           argumentsDelta: JSON.stringify({
-            kind: scenario === 'confirmed' ? 'slides' : 'markdown_document',
+            kind:
+              scenario === 'confirmed'
+                ? 'slides'
+                : scenario === 'confirmed_wrong_kind'
+                  ? 'note'
+                  : 'markdown_document',
             title: '课程文档',
             instruction: '整理课程。',
           }),
@@ -158,7 +171,7 @@ async function run(
     { sourceCount: 0 } as WebOperationSources,
     artifacts,
     { events: () => [] } as unknown as WebOperationImageArtifacts,
-    scenario === 'confirmed' ? 'interactive_artifact' : 'markdown_document',
+    confirmedArtifactKind ? 'interactive_artifact' : 'markdown_document',
     ['artifact.create'],
     {
       listAvailableCapabilitiesForOperation: vi.fn().mockResolvedValue([]),
@@ -169,7 +182,7 @@ async function run(
     'owner',
     { successfulSearchCount: 0 },
     false,
-    scenario === 'confirmed' ? 'slides' : null,
+    confirmedArtifactKind ?? null,
   );
   const application = createTurnApplication({
     lifecycle,
@@ -224,6 +237,27 @@ describe('TurnApplication + WebGeneralProfile + ToolKernel 产物真实性', () 
     ]);
     expect(result.events.at(-1)).toMatchObject({ type: 'turn.completed' });
     expect(content(result.events)).toBe(safeSubmission);
+  });
+
+  it('模型把确认的 Slides 请求成 note 时在仓储前拒绝且不冒报成功', async () => {
+    const result = await run('confirmed_wrong_kind');
+
+    expect(
+      result.repository.createArtifactWithGenerationJob,
+    ).not.toHaveBeenCalled();
+    expect(result.artifacts.events()).toEqual([]);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({ type: 'tool.failed', code: 'TOOL_FAILED' }),
+    );
+    expect(result.events.at(-1)).toMatchObject({
+      type: 'turn.failed',
+      code: 'TOOL_FAILED',
+      retryable: false,
+    });
+    expect(result.events.some((event) => event.type === 'turn.completed')).toBe(
+      false,
+    );
+    expect(content(result.events)).not.toContain('已提交后台任务');
   });
 
   it('假提交/完成自述只获得一次补救模型调用，最终失败且不可重试', async () => {

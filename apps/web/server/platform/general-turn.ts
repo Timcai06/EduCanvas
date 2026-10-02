@@ -108,6 +108,7 @@ export async function beginGatewayGeneralTurnApplication(input: {
     spaceId: input.route.notebookId,
     operationId: input.operationId,
     sourceReferences: artifactSourceReferences,
+    confirmedArtifactKind: input.confirmedArtifactKind,
   });
   const operationImages = new WebOperationImageArtifacts({
     identity: input.identity,

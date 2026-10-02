@@ -45,6 +45,85 @@ const job: PlatformArtifactJob = {
 };
 
 describe('WebOperationArtifacts', () => {
+  it('确认 Slides 时收窄工具 schema，并在调用仓储前拒绝 note', async () => {
+    const repository = {
+      createArtifactWithGenerationJob: vi.fn().mockResolvedValue({
+        artifact: { ...artifact, kind: 'slides' },
+        job,
+      }),
+    };
+    const operationArtifacts = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+        confirmedArtifactKind: 'slides',
+      },
+      repository,
+    );
+    const tool = operationArtifacts.createTool();
+    const wrongKind = {
+      kind: 'note' as const,
+      title: '课程笔记',
+      instruction: '整理课程内容。',
+    };
+
+    expect(tool.inputSchema.safeParse(wrongKind).success).toBe(false);
+    await expect(tool.handler(wrongKind, context)).rejects.toThrow(
+      'artifact_confirmation_kind_mismatch',
+    );
+    expect(repository.createArtifactWithGenerationJob).not.toHaveBeenCalled();
+
+    const result = await tool.handler(
+      {
+        kind: 'slides',
+        title: '课程讲解',
+        instruction: '整理课程内容。',
+      },
+      context,
+    );
+
+    expect(repository.createArtifactWithGenerationJob).toHaveBeenCalledTimes(1);
+    expect(repository.createArtifactWithGenerationJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        operationId: 'operation-1',
+        kind: 'slides',
+      }),
+    );
+    expect(result).toMatchObject({ kind: 'slides', status: 'proposed' });
+  });
+
+  it('auto proposal 只保留内存候选，不创建 Artifact 或 Generation Job', async () => {
+    const repository = {
+      createArtifactWithGenerationJob: vi.fn(),
+    };
+    const operationArtifacts = new WebOperationArtifacts(
+      {
+        identity,
+        conversationId: context.conversationId,
+        spaceId: artifact.spaceId,
+        operationId: 'operation-1',
+      },
+      repository,
+    );
+    const result = await operationArtifacts
+      .requestConfirmationTool()
+      .handler({ kind: 'slides', title: '课程讲解' }, context);
+
+    expect(result).toEqual({
+      kind: 'slides',
+      title: '课程讲解',
+      status: 'awaiting_confirmation',
+    });
+    expect(operationArtifacts.confirmationProposalSnapshot()).toEqual({
+      kind: 'slides',
+      title: '课程讲解',
+    });
+    expect(repository.createArtifactWithGenerationJob).not.toHaveBeenCalled();
+    expect(operationArtifacts.events()).toEqual([]);
+  });
+
   it('拒绝把同一 Turn 已有的其他类型 Artifact 伪装成新提议', async () => {
     const repository = {
       createArtifactWithGenerationJob: vi.fn().mockResolvedValue({

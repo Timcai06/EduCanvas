@@ -8,6 +8,7 @@ import type {
 import {
   artifactProposalKindSchema,
   artifactProposalSchema,
+  type ArtifactProposalKind,
   type AssetVersionReference,
   type AssetVersionRepresentationIdentity,
 } from '@educanvas/agent-core';
@@ -31,7 +32,7 @@ import {
   type GeneralTurnArtifactSemanticRequest,
 } from './operation-artifact-idempotency';
 
-const createCanvasArtifactInputSchema = artifactProposalSchema;
+type CreateCanvasArtifactInput = z.infer<typeof artifactProposalSchema>;
 
 export const createCanvasArtifactOutputSchema = z
   .object({
@@ -140,6 +141,7 @@ export class WebOperationArtifacts {
       conversationId: string;
       spaceId: string;
       operationId: string;
+      confirmedArtifactKind?: ArtifactProposalKind;
       /**
        * 只能由已物化的服务端 Asset plan 注入。模型和浏览器都不能声明 Artifact
        * provenance；所有输入段在 General Profile 中是 required，因此这里与随后
@@ -152,14 +154,19 @@ export class WebOperationArtifacts {
   ) {}
 
   createTool(): AgentTool<
-    z.infer<typeof createCanvasArtifactInputSchema>,
+    CreateCanvasArtifactInput,
     z.infer<typeof createCanvasArtifactOutputSchema>
   > {
+    const inputSchema = this.input.confirmedArtifactKind
+      ? artifactProposalSchema.extend({
+          kind: z.literal(this.input.confirmedArtifactKind),
+        })
+      : artifactProposalSchema;
     return {
       name: 'createCanvasArtifact',
       description:
         '在当前 Notebook 的 Canvas 中提议持久产物。只选择契约闭集中的 Markdown 文档、思维导图、Slides、闪卡、低龄知识绘本、笔记或 Web App；instruction 必须概括用户要求；返回 proposed 只表示服务端已原子创建任务，不代表已完成。',
-      inputSchema: createCanvasArtifactInputSchema,
+      inputSchema,
       outputSchema: createCanvasArtifactOutputSchema,
       timeoutMs: 15_000,
       handler: async (toolInput, context) =>
@@ -276,7 +283,7 @@ export class WebOperationArtifacts {
   }
 
   private async createArtifact(
-    toolInput: z.infer<typeof createCanvasArtifactInputSchema>,
+    toolInput: CreateCanvasArtifactInput,
     context: AgentToolContext,
   ): Promise<z.infer<typeof createCanvasArtifactOutputSchema>> {
     if (
@@ -284,6 +291,12 @@ export class WebOperationArtifacts {
       context.conversationId !== this.input.conversationId
     ) {
       throw new Error('canvas_artifact_scope_mismatch');
+    }
+    if (
+      this.input.confirmedArtifactKind &&
+      toolInput.kind !== this.input.confirmedArtifactKind
+    ) {
+      throw new Error('artifact_confirmation_kind_mismatch');
     }
     const created = await this.repository.createArtifactWithGenerationJob({
       spaceId: this.input.spaceId,
