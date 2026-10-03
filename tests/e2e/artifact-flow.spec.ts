@@ -129,8 +129,19 @@ test("@ui 思维导图手动放大后折叠分支保留缩放", async ({ page })
   const manuallyChosenScale = await readScale();
 
   const root = viewport.locator('[data-mindmap-node="root"]');
+  await expect(root).toHaveAttribute("aria-expanded", "true");
   await root.getByRole("button", { name: "折叠节点子分支" }).click();
   await expect(root).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    viewport.locator('[data-mindmap-node="training"]'),
+  ).toBeHidden();
+  await expect.poll(readScale).toBe(manuallyChosenScale);
+
+  await root.getByRole("button", { name: /展开节点子分支/ }).click();
+  await expect(root).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    viewport.locator('[data-mindmap-node="training"]'),
+  ).toBeVisible();
   await expect.poll(readScale).toBe(manuallyChosenScale);
 });
 
