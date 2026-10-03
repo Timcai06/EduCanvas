@@ -29,13 +29,6 @@ console.log(JSON.stringify({ pid: process.pid }));`,
   let timeout;
   let pid;
   t.after(async () => {
-    if (pid) {
-      try {
-        process.kill(pid, 'SIGKILL');
-      } catch (error) {
-        if (error.code !== 'ESRCH') throw error;
-      }
-    }
     await handle.stop(100);
     lines.close();
   });
@@ -110,4 +103,32 @@ test('teardown remains bounded after startup has already failed', async (t) => {
   await once(handle.child, 'close');
   await handle.stop(100);
   assert.notEqual(handle.child.exitCode, 0);
+});
+
+test('fixture cleanup never signals an exited worker PID', async (t) => {
+  const cleanups = [];
+  const handle = await fixture(
+    { after: (cleanup) => cleanups.push(cleanup) },
+    'process.exit(0);',
+  );
+  t.after(async () => {
+    await handle.stop(100);
+    await rm(handle.cwd, { recursive: true, force: true });
+  });
+  const closed = once(handle.child, 'close');
+  await writeFile(path.join(handle.cwd, 'complete'), 'complete');
+  await closed;
+  assert.equal(handle.child.exitCode, 0);
+
+  // Intercept stale-PID signals so the regression cannot itself harm a reused PID.
+  const rawKill = t.mock.method(process, 'kill', () => {
+    assert.fail('cleanup must not signal a bare PID after worker close');
+  });
+  const childKill = t.mock.method(handle.child, 'kill', () => {
+    assert.fail('cleanup must not signal an exited child');
+  });
+  for (const cleanup of cleanups) await cleanup();
+  await handle.stop(100);
+  assert.equal(rawKill.mock.callCount(), 0);
+  assert.equal(childKill.mock.callCount(), 0);
 });
