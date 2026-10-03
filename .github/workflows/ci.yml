@@ -565,6 +565,8 @@ jobs:
 
       - name: Full browser E2E (Chromium desktop + mobile + Firefox)
         id: browser_e2e_full
+        env:
+          E2E_NAVIGATION_DIAGNOSTICS: '1'
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         # 必须显式指定 config：裸 `playwright test` 会退回默认发现规则，
         # 把全仓 vitest *.test.ts 当作 e2e spec 加载并直接失败，
@@ -584,7 +586,7 @@ jobs:
         run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
 
       - name: Upload Playwright diagnostics
-        if: failure()
+        if: failure() || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
         with:
           name: playwright-diagnostics

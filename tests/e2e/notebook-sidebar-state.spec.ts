@@ -1,10 +1,20 @@
 import { expect, test } from "@playwright/test";
+import { navigationDiagnostics } from "./helpers/navigation-diagnostics";
 import {
   closeNotebookSidebar,
   notebookSidebar,
   openNotebookSidebar,
   waitForUnavailableTurn,
 } from "./helpers/journey-helpers";
+
+let finishDiagnostics: (() => Promise<void>) | undefined;
+test.beforeEach(async ({ page }, info) => {
+  finishDiagnostics = await navigationDiagnostics(page, info);
+});
+test.afterEach(async () => {
+  await finishDiagnostics?.();
+  finishDiagnostics = undefined;
+});
 
 test("笔记本侧栏关闭幂等且重载遵循桌面持久化与窄屏默认收起", async ({
   page,

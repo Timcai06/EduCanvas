@@ -99,6 +99,15 @@ export default defineConfig({
     cwd: repoRoot,
     env: {
       ...process.env,
+      ...(process.env.E2E_NAVIGATION_DIAGNOSTICS
+        ? {
+            NODE_OPTIONS: `--require=${path.join(repoRoot, 'tooling/playwright/navigation-server-probe.cjs')}`,
+            E2E_NAVIGATION_SERVER_LOG: path.join(
+              repoRoot,
+              'output/playwright/navigation-server.ndjson',
+            ),
+          }
+        : {}),
       DATABASE_URL: databaseUrl,
       EDUCANVAS_DEPLOYMENT_ENV: 'test',
       EDUCANVAS_EXPERIENCE_MODE_DEFAULT: 'restricted',
