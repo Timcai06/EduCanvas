@@ -1,8 +1,12 @@
+import { tryParseLogRecord } from '../local/local-process-pipe.mjs';
+
 const FAILED_TASK_PATTERN =
   /ERROR:\s+Failed task\s+\d+\s+\(([^,\s]+),[\s\S]*?attempt\s+(\d+)\s+of\s+(\d+)\)/;
 
 function normalizeTaskIdentifier(value) {
-  return value.replace(/[^a-zA-Z0-9:_-]/g, '').slice(0, 120);
+  return typeof value === 'string' && /^[a-zA-Z0-9_.:-]{1,120}$/.test(value)
+    ? value
+    : 'unknown';
 }
 
 /**
@@ -16,15 +20,34 @@ export function createE2eWorkerLogAudit({ allowedTaskIdentifiers = [] } = {}) {
   let pending = '';
 
   function inspectLine(line) {
+    const record = tryParseLogRecord(line);
     const match = FAILED_TASK_PATTERN.exec(line);
-    if (!match) return;
-    const taskIdentifier = normalizeTaskIdentifier(match[1] ?? '');
-    if (!taskIdentifier || allowed.has(taskIdentifier)) return;
-    const attempt = Number(match[2]);
-    const maxAttempts = Number(match[3]);
+    const structuredFailure =
+      record?.service === 'worker' && record.event === 'worker.job.failed';
+    if (!structuredFailure && !match) return;
+    const taskIdentifier = normalizeTaskIdentifier(
+      structuredFailure ? record.taskIdentifier : match?.[1],
+    );
+    if (taskIdentifier !== 'unknown' && allowed.has(taskIdentifier)) return;
+    const rawAttempt = structuredFailure ? record.attempt : Number(match[2]);
+    const rawMaxAttempts = structuredFailure
+      ? record.maxAttempts
+      : Number(match[3]);
+    const attempt =
+      Number.isSafeInteger(rawAttempt) && rawAttempt > 0
+        ? rawAttempt
+        : 'unknown';
+    const maxAttempts =
+      Number.isSafeInteger(rawMaxAttempts) && rawMaxAttempts > 0
+        ? rawMaxAttempts
+        : 'unknown';
     failures.set(
       `${taskIdentifier}:${attempt}:${maxAttempts}`,
-      Object.freeze({ taskIdentifier, attempt, maxAttempts }),
+      Object.freeze({
+        taskIdentifier,
+        attempt,
+        maxAttempts,
+      }),
     );
   }
 

@@ -45,3 +45,84 @@ test('permits only explicitly allowlisted task identifiers', () => {
   );
   assert.doesNotThrow(() => audit.assertClean());
 });
+
+test('rejects structured worker failures after a later successful retry without leaking metadata', () => {
+  const audit = createE2eWorkerLogAudit();
+  const record = {
+    schema: 'educanvas.log.v1',
+    ts: '2026-10-03T00:00:00.000Z',
+    level: 'error',
+    service: 'worker',
+    event: 'worker.job.failed',
+    taskIdentifier: 'artifacts:generate',
+    attempt: 1,
+    maxAttempts: 3,
+    message: 'private provider body',
+    error: { message: 'secret', stack: 'private stack' },
+    payload: { studentText: 'private student content' },
+  };
+  const line = JSON.stringify(record);
+  audit.ingest(line.slice(0, 80));
+  audit.ingest(line.slice(80) + '\n');
+  audit.ingest(
+    JSON.stringify({
+      ...record,
+      event: 'worker.job.completed',
+      level: 'info',
+      attempt: 2,
+    }) + '\n',
+  );
+  assert.throws(
+    () => audit.assertClean(),
+    (error) => {
+      assert.match(error.message, /artifacts:generate attempt 1\/3/);
+      assert.doesNotMatch(error.message, /private|secret|student|stack/);
+      return true;
+    },
+  );
+});
+
+test('permits an explicitly allowlisted structured task failure', () => {
+  const audit = createE2eWorkerLogAudit({
+    allowedTaskIdentifiers: ['test:intentional_failure'],
+  });
+  audit.ingest(
+    JSON.stringify({
+      schema: 'educanvas.log.v1',
+      ts: '2026-10-03T00:00:00.000Z',
+      level: 'error',
+      service: 'worker',
+      event: 'worker.job.failed',
+      taskIdentifier: 'test:intentional_failure',
+      attempt: 1,
+      maxAttempts: 1,
+    }) + '\n',
+  );
+  assert.doesNotThrow(() => audit.assertClean());
+});
+
+test('does not normalize invalid task names into an allowed failure', () => {
+  const audit = createE2eWorkerLogAudit({
+    allowedTaskIdentifiers: ['test:intentional_failure'],
+  });
+  audit.ingest(
+    JSON.stringify({
+      schema: 'educanvas.log.v1',
+      ts: '2026-10-03T00:00:00.000Z',
+      level: 'error',
+      service: 'worker',
+      event: 'worker.job.failed',
+      taskIdentifier: 'test:intentional_failure!',
+      attempt: { private: 'secret' },
+      maxAttempts: 'private provider data',
+    }) + '\n',
+  );
+  assert.throws(
+    () => audit.assertClean(),
+    (error) => {
+      assert.match(error.message, /unknown attempt unknown\/unknown/);
+      assert.doesNotMatch(error.message, /private|secret|provider/);
+      return true;
+    },
+  );
+});
