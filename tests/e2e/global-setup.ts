@@ -1,20 +1,72 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { chromium, type FullConfig } from '@playwright/test';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import { mkdir, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { spawnE2eWorker } from '../../tooling/e2e/e2e-worker-process.mjs';
 import { createE2eWorkerLogAudit } from '../../tooling/e2e/e2e-worker-log-audit.mjs';
 import {
   createLineSplitter,
   tryParseLogRecord,
 } from '../../tooling/local/local-process-pipe.mjs';
 
+const timing: Record<string, unknown>[] = [];
+let fixtureRequestId = 0;
+const fixtureRequests = new WeakMap<IncomingMessage, number>();
+function recordTiming(event: string, fields: Record<string, unknown> = {}) {
+  if (process.env.E2E_NAVIGATION_DIAGNOSTICS && timing.length < 2000) {
+    timing.push({ at: Date.now(), event, ...fields });
+  }
+}
+
 async function readBody(request: IncomingMessage): Promise<unknown> {
+  recordTiming('fixture.body.start', { id: fixtureRequests.get(request) });
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  recordTiming('fixture.body.end', { id: fixtureRequests.get(request) });
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
 function structuredFixture(schemaPrompt: string, prompt: string): unknown {
+  if (prompt.includes('课程网页内容生成器')) {
+    const html =
+      '<!doctype html><html><body><main id="runtime-result">正在启动</main></body></html>';
+    const script = [
+      'window.educanvasRuntime.output("A".repeat(16384));',
+      'window.educanvasRuntime.output("B".repeat(16384));',
+      'document.getElementById("runtime-result").textContent = "合成 Provider 生成的 Web App 已执行";',
+      'window.setTimeout(() => window.educanvasRuntime.succeed(), 250);',
+    ].join('\n');
+    const file = (path: string, mediaType: string, content: string) => ({
+      path,
+      mediaType,
+      content,
+      hash: createHash('sha256').update(content, 'utf8').digest('hex'),
+    });
+    return {
+      schemaVersion: 1,
+      manifest: {
+        entry: 'index.html',
+        files: [
+          file('index.html', 'text/html', html),
+          file('app.js', 'text/javascript', script),
+        ],
+      },
+      lockedDependencies: [],
+      capabilities: ['dom-manipulation', 'css-render', 'javascript-runtime'],
+      budget: {
+        maxInputBytes: 8192,
+        maxMessageBytes: 8192,
+        maxOutputBytes: 16_000,
+        maxDurationMs: 5000,
+        maxConcurrentInstances: 1,
+        maxQueueDepth: 8,
+        maxMessagesPerSecond: 5,
+      },
+      diagnostics: [{ code: 'build_succeeded' }],
+      generatedByModel: true,
+    };
+  }
   if (schemaPrompt.includes('"script"')) {
     return {
       script:
@@ -76,6 +128,22 @@ async function startFixtureProvider(): Promise<{
   baseUrl: string;
 }> {
   const server = createServer(async (request, response) => {
+    const id = ++fixtureRequestId;
+    fixtureRequests.set(request, id);
+    const kind =
+      request.url === '/v1/chat/completions'
+        ? 'structured'
+        : request.url === '/v1/audio/speech'
+          ? 'speech'
+          : 'other';
+    recordTiming('fixture.request', { id, kind });
+    response.once('finish', () =>
+      recordTiming('fixture.response.finish', {
+        id,
+        kind,
+        status: response.statusCode,
+      }),
+    );
     if (request.url === '/v1/audio/speech') {
       for await (const _chunk of request) {
         // drain request before responding
@@ -166,99 +234,169 @@ async function startFixtureProvider(): Promise<{
  * 产物生成链路才是端到端而不是纸面)。worker 连接 E2E 隔离库并在启动时
  * 自迁移 graphile schema;退出由 globalSetup 返回的 teardown 负责。
  */
-export default async function globalSetup(): Promise<() => Promise<void>> {
+export default async function globalSetup(
+  config: FullConfig,
+): Promise<() => Promise<void>> {
   const databaseUrl = process.env.E2E_DATABASE_URL;
   if (!databaseUrl) throw new Error('E2E_DATABASE_URL 未设置');
   const objectStorageRoot = path.resolve('output/playwright/object-storage');
   await rm(objectStorageRoot, { recursive: true, force: true });
   await mkdir(objectStorageRoot, { recursive: true });
+  const chromiumProject = config.projects.find((project) =>
+    project.name.startsWith('chromium'),
+  );
+  if (chromiumProject) {
+    const browser = await chromium.launch(chromiumProject.use.launchOptions);
+    try {
+      const session = await browser.newBrowserCDPSession();
+      const { gpu } = await session.send('SystemInfo.getInfo');
+      const page = await browser.newPage();
+      const webGl2 = await page.evaluate(() =>
+        (() => {
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 2;
+          let creationError = '';
+          canvas.addEventListener('webglcontextcreationerror', (event) => {
+            creationError = (event as WebGLContextEvent).statusMessage.slice(
+              0,
+              500,
+            );
+          });
+          const gl = canvas.getContext('webgl2');
+          if (!gl)
+            return { available: false, pixel: [] as number[], creationError };
+          gl.clearColor(1, 0, 0, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          const pixel = new Uint8Array(4);
+          gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+          return { available: true, pixel: Array.from(pixel), creationError };
+        })(),
+      );
+      await writeFile(
+        path.resolve('output/playwright/browser-renderer.json'),
+        JSON.stringify({
+          version: browser.version(),
+          renderer: gpu.auxAttributes?.glRenderer,
+          vendor: gpu.auxAttributes?.glVendor,
+          features: {
+            webgl: gpu.featureStatus?.webgl,
+            webgl2: gpu.featureStatus?.webgl2,
+            opengl: gpu.featureStatus?.opengl,
+          },
+          creationError: webGl2.creationError,
+          webGl2: webGl2.available,
+          drawingVerified: webGl2.pixel.join(',') === '255,0,0,255',
+        }),
+      );
+      if (!webGl2.available || webGl2.pixel.join(',') !== '255,0,0,255')
+        throw new Error(
+          'Chromium E2E WebGL2 绘制不可用，拒绝用装饰降级掩盖渲染覆盖',
+        );
+    } finally {
+      await browser.close();
+    }
+  }
   const fixtureProvider = await startFixtureProvider();
   const workerLogAudit = createE2eWorkerLogAudit();
 
-  const worker: ChildProcess = spawn(
-    'pnpm',
-    ['--filter', '@educanvas/worker', 'start'],
-    {
-      // Windows 上 pnpm 是 pnpm.cmd，Node spawn 默认不解析 .cmd；
-      // Linux CI 的 PATH 直接有 pnpm 可执行。命令与参数均为常量，无注入面。
-      shell: process.platform === 'win32',
-      env: {
-        ...process.env,
-        DATABASE_URL: databaseUrl,
-        /* 只连接进程内 fixture Provider；不读取真实 Key，也不产生外部费用。 */
-        EDUCANVAS_DEPLOYMENT_ENV: 'test',
-        MODEL_GATEWAY_PROVIDER: 'openai-compatible',
-        MODEL_GATEWAY_BASE_URL: fixtureProvider.baseUrl,
-        MODEL_GATEWAY_API_KEY: 'e2e-fixture-key',
-        MODEL_GATEWAY_PRIMARY_MODEL: 'primary-e2e',
-        MODEL_GATEWAY_STRUCTURED_MODEL: 'structured-e2e',
-        MODEL_GATEWAY_SPEECH_MODEL: 'speech-e2e',
-        MODEL_GATEWAY_SPEECH_VOICE: 'alloy',
-        /* Web 上传与 Worker 派生任务必须读取同一隔离根；否则预览任务会在
-           默认 uploads 目录找不到 E2E 资产，并以重试占满 Worker。 */
-        ASSET_STORAGE_ROOT: objectStorageRoot,
-        OBJECT_STORAGE_ROOT: objectStorageRoot,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+  const workerProcess = spawnE2eWorker({
+    entrypoint: path.resolve('apps/worker/dist/index.js'),
+    cwd: path.resolve('apps/worker'),
+    environment: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      /* 只连接进程内 fixture Provider；不读取真实 Key，也不产生外部费用。 */
+      EDUCANVAS_DEPLOYMENT_ENV: 'test',
+      MODEL_GATEWAY_PROVIDER: 'openai-compatible',
+      MODEL_GATEWAY_BASE_URL: fixtureProvider.baseUrl,
+      MODEL_GATEWAY_API_KEY: 'e2e-fixture-key',
+      MODEL_GATEWAY_PRIMARY_MODEL: 'primary-e2e',
+      MODEL_GATEWAY_STRUCTURED_MODEL: 'structured-e2e',
+      MODEL_GATEWAY_SPEECH_MODEL: 'speech-e2e',
+      MODEL_GATEWAY_SPEECH_VOICE: 'alloy',
+      /* Web 上传与 Worker 派生任务必须读取同一隔离根；否则预览任务会在
+         默认 uploads 目录找不到 E2E 资产，并以重试占满 Worker。 */
+      ASSET_STORAGE_ROOT: objectStorageRoot,
+      OBJECT_STORAGE_ROOT: objectStorageRoot,
     },
-  );
-
-  await new Promise<void>((resolve, reject) => {
-    // 90s：Linux CI 上 pnpm shim 冷启动约数秒；Windows 本地 pnpm --filter
-    // 解析 workspace 并输出引擎 WARN 明显更慢，30s 是 CI 级偶发超时源。
-    // 只认统一日志协议的 worker.ready，避免展示文案变化破坏 readiness。
-    const timeout = setTimeout(
-      () => reject(new Error('worker 启动超时(90s)')),
-      90_000,
-    );
-    const readiness = createLineSplitter((line: string) => {
-      const record = tryParseLogRecord(line);
-      if (record?.service === 'worker' && record.event === 'worker.ready') {
-        clearTimeout(timeout);
-        resolve();
-      }
-    });
-    worker.stdout?.on('data', (chunk: Buffer) => {
-      workerLogAudit.ingest(chunk);
-      readiness.push(chunk);
-    });
-    worker.stderr?.on('data', (chunk: Buffer) => {
-      workerLogAudit.ingest(chunk);
-      process.stderr.write(`[e2e-worker] ${chunk.toString()}`);
-    });
-    worker.on('exit', (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`worker 提前退出,code=${code}`));
-    });
   });
+  const worker = workerProcess.child;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // 跨平台保留有界启动预算，只认统一日志协议的 worker.ready，
+      // 避免数据库初始化耗时或展示文案变化破坏 readiness。
+      const timeout = setTimeout(
+        () => reject(new Error('worker 启动超时(90s)')),
+        90_000,
+      );
+      const readiness = createLineSplitter((line: string) => {
+        const record = tryParseLogRecord(line);
+        if (record?.service === 'worker' && record.event === 'worker.ready') {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+      const taskTiming = createLineSplitter((line: string) => {
+        const record = tryParseLogRecord(line);
+        if (
+          !record ||
+          !['worker.job.failed', 'worker.job.completed'].includes(record.event)
+        )
+          return;
+        const fields: Record<string, unknown> = {};
+        for (const key of ['attempt', 'maxAttempts', 'durationMs']) {
+          if (typeof record[key] === 'number' && Number.isFinite(record[key]))
+            fields[key] = record[key];
+        }
+        for (const key of ['taskIdentifier', 'jobId']) {
+          if (
+            typeof record[key] === 'string' &&
+            /^[a-zA-Z0-9:_-]{1,120}$/.test(record[key])
+          )
+            fields[key] = record[key];
+        }
+        recordTiming(record.event, fields);
+      });
+      worker.stdout?.on('data', (chunk: Buffer) => {
+        workerLogAudit.ingest(chunk);
+        readiness.push(chunk);
+        taskTiming.push(chunk);
+      });
+      worker.stderr?.on('data', (chunk: Buffer) => {
+        workerLogAudit.ingest(chunk);
+        process.stderr.write(`[e2e-worker] ${chunk.toString()}`);
+      });
+      worker.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      worker.on('exit', (code) => {
+        clearTimeout(timeout);
+        reject(new Error(`worker 提前退出,code=${code}`));
+      });
+    });
+  } catch (error) {
+    await workerProcess.stop();
+    await new Promise<void>((resolve) =>
+      fixtureProvider.server.close(() => resolve()),
+    );
+    throw error;
+  }
 
   return async () => {
-    if (worker.exitCode === null && worker.signalCode === null) {
-      const exited = new Promise<void>((resolve) =>
-        worker.once('exit', () => resolve()),
-      );
-      worker.kill('SIGTERM');
-      let forceKillTimer: NodeJS.Timeout | undefined;
-      try {
-        await Promise.race([
-          exited,
-          new Promise<void>((resolve) => {
-            forceKillTimer = setTimeout(resolve, 5_000);
-          }),
-        ]);
-      } finally {
-        if (forceKillTimer) clearTimeout(forceKillTimer);
-      }
-      if (worker.exitCode === null && worker.signalCode === null) {
-        worker.kill('SIGKILL');
-        await exited;
-      }
-    }
+    await workerProcess.stop();
     await new Promise<void>((resolve, reject) =>
       fixtureProvider.server.close((error) =>
         error ? reject(error) : resolve(),
       ),
     );
+    if (process.env.E2E_NAVIGATION_DIAGNOSTICS) {
+      await writeFile(
+        path.resolve('output/playwright/worker-timing.json'),
+        JSON.stringify(timing),
+      );
+    }
     await rm(objectStorageRoot, { recursive: true, force: true });
     workerLogAudit.assertClean();
   };

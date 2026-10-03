@@ -77,14 +77,30 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: [
+            '--use-angle=gl',
+            ...(process.platform === 'linux' ? ['--ignore-gpu-blocklist'] : []),
+          ],
+        },
+      },
     },
     // Q05：移动 viewport 进入稳定 lane（第二 device 环境）。
     // 与 desktop 同一浏览器内核，不新增 CI 浏览器安装；
     // 响应式回归由本 project 在每次 PR 必跑捕获。
     {
       name: 'chromium-mobile',
-      use: { ...devices['Pixel 7'] },
+      use: {
+        ...devices['Pixel 7'],
+        launchOptions: {
+          args: [
+            '--use-angle=gl',
+            ...(process.platform === 'linux' ? ['--ignore-gpu-blocklist'] : []),
+          ],
+        },
+      },
     },
     // W06：第二引擎进入稳定 lane（Desktop + Mobile viewport + 跨内核）。
     // Firefox 与 @ui lane 复用同一安装，
@@ -99,6 +115,15 @@ export default defineConfig({
     cwd: repoRoot,
     env: {
       ...process.env,
+      ...(process.env.E2E_NAVIGATION_DIAGNOSTICS
+        ? {
+            NODE_OPTIONS: `--require=${path.join(repoRoot, 'tooling/playwright/navigation-server-probe.cjs')}`,
+            E2E_NAVIGATION_SERVER_LOG: path.join(
+              repoRoot,
+              'output/playwright/navigation-server.ndjson',
+            ),
+          }
+        : {}),
       DATABASE_URL: databaseUrl,
       EDUCANVAS_DEPLOYMENT_ENV: 'test',
       EDUCANVAS_EXPERIENCE_MODE_DEFAULT: 'restricted',

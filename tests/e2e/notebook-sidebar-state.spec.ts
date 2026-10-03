@@ -1,10 +1,20 @@
 import { expect, test } from "@playwright/test";
+import { navigationDiagnostics } from "./helpers/navigation-diagnostics";
 import {
   closeNotebookSidebar,
   notebookSidebar,
   openNotebookSidebar,
   waitForUnavailableTurn,
 } from "./helpers/journey-helpers";
+
+let finishDiagnostics: (() => Promise<void>) | undefined;
+test.beforeEach(async ({ page }, info) => {
+  finishDiagnostics = await navigationDiagnostics(page, info);
+});
+test.afterEach(async () => {
+  await finishDiagnostics?.();
+  finishDiagnostics = undefined;
+});
 
 test("笔记本侧栏关闭幂等且重载遵循桌面持久化与窄屏默认收起", async ({
   page,
@@ -25,7 +35,9 @@ test("笔记本侧栏关闭幂等且重载遵循桌面持久化与窄屏默认�
     await page.evaluate(() => localStorage.getItem("educanvas.sidebar")),
   ).toBe("0");
 
-  await page.reload();
+  // Notebook routes may stream their loading fallback before completing the
+  // document response. The initialized marker below is the app-ready boundary.
+  await page.reload({ waitUntil: "commit" });
   await expect(page.locator('[data-sidebar-initialized="true"]')).toHaveCount(
     1,
   );
@@ -39,7 +51,7 @@ test("笔记本侧栏关闭幂等且重载遵循桌面持久化与窄屏默认�
   expect(
     await page.evaluate(() => localStorage.getItem("educanvas.sidebar")),
   ).toBe("1");
-  await page.reload();
+  await page.reload({ waitUntil: "commit" });
   await expect(page.locator('[data-sidebar-initialized="true"]')).toHaveCount(
     1,
   );
@@ -56,4 +68,53 @@ test("笔记本侧栏关闭幂等且重载遵循桌面持久化与窄屏默认�
   expect(
     await page.evaluate(() => localStorage.getItem("educanvas.sidebar")),
   ).toBe("0");
+});
+
+test("侧栏关闭后归还入口焦点，但延迟回调不抢占新的输入焦点", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const composer = page.getByRole("textbox", { name: "向 EduCanvas 提问" });
+  await composer.fill("验证侧栏焦点恢复");
+  await page.getByRole("button", { name: "发送", exact: true }).click();
+  await waitForUnavailableTurn(page);
+  const sidebar = await openNotebookSidebar(page);
+  await sidebar.getByRole("button", { name: "收起列表" }).click();
+  const opener = page.getByRole("button", { name: "打开笔记本列表" });
+  await expect(opener).toBeFocused();
+  await openNotebookSidebar(page);
+  await page.keyboard.press("Escape");
+  await expect(opener).toBeFocused();
+  await openNotebookSidebar(page);
+
+  // 控制下一帧的顺序，覆盖关闭与新输入交错；不靠随机延迟碰运气。
+  await page.evaluate(() => {
+    const original = window.requestAnimationFrame;
+    const callbacks: FrameRequestCallback[] = [];
+    window.requestAnimationFrame = (callback) => {
+      callbacks.push(callback);
+      return callbacks.length;
+    };
+    Object.assign(window, {
+      flushSidebarFrames: () => {
+        window.requestAnimationFrame = original;
+        for (const callback of callbacks.splice(0)) callback(performance.now());
+      },
+    });
+  });
+  const close = sidebar.locator("button").filter({ hasText: "收起列表" });
+  await close.focus();
+  await close.dispatchEvent("click");
+  await close.dispatchEvent("click");
+  await expect(sidebar).toHaveAttribute("aria-hidden", "true");
+  await composer.focus();
+  await expect(composer).toBeFocused();
+  await page.evaluate(() => {
+    const frames = window as unknown as { flushSidebarFrames: () => void };
+    frames.flushSidebarFrames();
+  });
+  await expect(composer).toBeFocused();
+  await composer.fill("校园雨水花园笔记本");
+  await expect(composer).toHaveValue("校园雨水花园笔记本");
 });

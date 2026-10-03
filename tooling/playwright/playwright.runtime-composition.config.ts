@@ -31,6 +31,7 @@ const objectStorageRoot = path.join(
 export default defineConfig({
   testDir: path.join(repoRoot, 'tests/e2e'),
   testMatch: 'web-runtime-composition.spec.ts',
+  globalSetup: path.join(repoRoot, 'tests/e2e/global-setup.ts'),
   fullyParallel: false,
   workers: 1,
   forbidOnly: Boolean(process.env.CI),

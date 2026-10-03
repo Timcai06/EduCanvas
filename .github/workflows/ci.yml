@@ -561,15 +561,18 @@ jobs:
       - name: Browser E2E smoke (Chromium desktop)
         id: browser_e2e_smoke
         if: github.event_name == 'pull_request' || github.event_name == 'push'
-        run: pnpm test:e2e:pr
+        run: xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:e2e:pr
 
       - name: Full browser E2E (Chromium desktop + mobile + Firefox)
         id: browser_e2e_full
+        env:
+          E2E_NAVIGATION_DIAGNOSTICS: '1'
+          E2E_NAVIGATION_CPU_PROFILE_DISABLED: '1'
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         # 必须显式指定 config：裸 `playwright test` 会退回默认发现规则，
         # 把全仓 vitest *.test.ts 当作 e2e spec 加载并直接失败，
         # 导致完整矩阵实际从未运行（2026-08-28 起 nightly 连续红）。
-        run: pnpm test:e2e
+        run: xvfb-run --auto-servernum --server-args='-screen 0 1920x1080x24' pnpm test:e2e
 
       # Q05：retry/flaky 显式报告（failOnFlakyTests 已让 flaky 在 CI 直接失败，
       # 这里把 retry 次数与 flaky 名单写入 CI Summary，不得完全隐藏）。
@@ -584,7 +587,7 @@ jobs:
         run: node tooling/quality/playwright-summary.mjs output/playwright/results.json --summary
 
       - name: Upload Playwright diagnostics
-        if: failure()
+        if: failure() || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4 tag
         with:
           name: playwright-diagnostics

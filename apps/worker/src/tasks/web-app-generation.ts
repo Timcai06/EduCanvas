@@ -38,10 +38,10 @@ interface GenerateWebAppInput {
 const BUDGET = {
   maxInputBytes: 8_192,
   maxMessageBytes: 8_192,
-  maxOutputBytes: 16_000,
+  maxOutputBytes: 64 * 1024,
   maxDurationMs: 5_000,
   maxConcurrentInstances: 1,
-  maxQueueDepth: 10,
+  maxQueueDepth: 8,
   maxMessagesPerSecond: 5,
 } as const;
 
@@ -261,7 +261,9 @@ export async function generateWebAppContent(
         content: [
           '你是课程网页内容生成器。',
           '输出 web_app.v1（schemaVersion=1）的自包含产物。',
-          '不得输出外部资源、CDN、网络 URL、脚本远程路径、JS import/export。',
+          '不得使用 import/export、fetch、WebSocket、EventSource、XMLHttpRequest、importScripts 或 navigator.sendBeacon。',
+          '不得输出 CDN、远程脚本或其他网络资源；HTML、CSS 和 JavaScript 只能引用 manifest 内的本地文件。',
+          '初始界面渲染成功后调用 window.educanvasRuntime.succeed()；只有初始化失败时才调用 fail()。',
           `manifest.entry 请使用 ${DEFAULT_ENTRY}。`,
         ].join('\n'),
       },

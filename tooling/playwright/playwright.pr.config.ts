@@ -15,7 +15,15 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium-pr-smoke',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: [
+            '--use-angle=gl',
+            ...(process.platform === 'linux' ? ['--ignore-gpu-blocklist'] : []),
+          ],
+        },
+      },
     },
   ],
 });

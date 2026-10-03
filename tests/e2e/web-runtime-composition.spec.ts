@@ -1,5 +1,9 @@
 import { expect, test, type Page } from '@playwright/test';
 import { createHash } from 'node:crypto';
+import {
+  createArtifactViaApi,
+  waitForGenerationJobSucceeded,
+} from './fixtures/general-artifact-fixture';
 
 const ACTIVE_CONVERSATION_COOKIE = '__Host-educanvas_active_conversation';
 const STUDIO_TRIGGER_NAME = '打开全部资源';
@@ -88,6 +92,7 @@ async function createRuntimeFixture(
 async function createGeneratedWebAppFixture(
   page: Page,
   title: string,
+  options: { maxOutputBytes?: number; script?: string } = {},
 ): Promise<RuntimeFixture> {
   const conversationId = await activeConversationId(page);
   process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
@@ -114,6 +119,7 @@ async function createGeneratedWebAppFixture(
   });
   const html = '<main id="runtime-result">Synthetic Web App 已执行</main>';
   const script =
+    options.script ??
     'window.educanvasRuntime.output("synthetic-web-app-ready"); setTimeout(() => window.educanvasRuntime.succeed(), 1_000);';
   const version = await repository.appendVersion({
     artifactId: artifact.id,
@@ -143,7 +149,7 @@ async function createGeneratedWebAppFixture(
       budget: {
         maxInputBytes: 1024,
         maxMessageBytes: 2048,
-        maxOutputBytes: 4096,
+        maxOutputBytes: options.maxOutputBytes ?? 4096,
         maxDurationMs: 10_000,
         maxConcurrentInstances: 1,
         maxQueueDepth: 1,
@@ -193,7 +199,126 @@ async function createRun(
   }, fixture);
 }
 
+async function persistedRuntimeTerminal(fixture: RuntimeFixture) {
+  process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
+  const testingDbModule = await import('@educanvas/db/testing');
+  const [run] = await testingDbModule
+    .getDb()
+    .select({
+      status: testingDbModule.webRuntimeRuns.status,
+      failureCode: testingDbModule.webRuntimeRuns.failureCode,
+    })
+    .from(testingDbModule.webRuntimeRuns)
+    .where(
+      testingDbModule.eq(
+        testingDbModule.webRuntimeRuns.artifactVersionId,
+        fixture.artifactVersionId,
+      ),
+    )
+    .limit(1);
+  return run ?? null;
+}
+
 test.describe('Runtime Composition: real Web, Runtime and PostgreSQL', () => {
+  test('API 生成的 Web App 使用扩大后的输出预算并在隔离 Runtime 执行', async ({
+    page,
+  }) => {
+    await ensureGeneralNotebook(page);
+    const title = 'U12 Generated Web App ' + Date.now();
+    const fixture = await createArtifactViaApi(page, 'web_app', title);
+    await waitForGenerationJobSucceeded(page, fixture.jobId);
+    await page.reload();
+
+    const studio = await openStudioOutput(page);
+    await studio.getByRole('button', { name: title }).click();
+    const runtime = page.getByTestId('persistent-web-runtime');
+    await expect(
+      page
+        .frameLocator('iframe[title="持久 Web Runtime"]')
+        .frameLocator('iframe')
+        .getByText('合成 Provider 生成的 Web App 已执行'),
+    ).toBeVisible();
+    await expect(runtime).toHaveAttribute('data-runtime-state', 'succeeded', {
+      timeout: 30_000,
+    });
+  });
+
+  test('Runtime Host 按 Web App 声明的输出字节上限拒绝超额输出', async ({
+    page,
+  }) => {
+    await ensureGeneralNotebook(page);
+    const title = 'U12 Runtime Output Limit ' + Date.now();
+    await createGeneratedWebAppFixture(page, title, {
+      maxOutputBytes: 4096,
+      script:
+        'window.educanvasRuntime.output("x".repeat(5000)); window.educanvasRuntime.succeed();',
+    });
+    await page.reload();
+
+    const studio = await openStudioOutput(page);
+    await studio.getByRole('button', { name: title }).click();
+    await expect(page.getByTestId('persistent-web-runtime')).toHaveAttribute(
+      'data-runtime-state',
+      'failed',
+      { timeout: 30_000 },
+    );
+  });
+
+  test('Runtime Host 按多条输出的累计字节预算拒绝输出并持久化稳定失败码', async ({
+    page,
+  }) => {
+    await ensureGeneralNotebook(page);
+    const title = 'U12 Runtime Cumulative Output Limit ' + Date.now();
+    const fixture = await createGeneratedWebAppFixture(page, title, {
+      maxOutputBytes: 4096,
+      script: [
+        'window.educanvasRuntime.output("A".repeat(3000));',
+        'window.educanvasRuntime.output("B".repeat(2000));',
+        'window.educanvasRuntime.succeed();',
+      ].join('\n'),
+    });
+    await page.reload();
+
+    const studio = await openStudioOutput(page);
+    await studio.getByRole('button', { name: title }).click();
+    const runtime = page.getByTestId('persistent-web-runtime');
+    await expect(runtime).toHaveAttribute('data-runtime-state', 'failed', {
+      timeout: 30_000,
+    });
+    await expect
+      .poll(() => persistedRuntimeTerminal(fixture), { timeout: 10_000 })
+      .toEqual({
+        status: 'failed',
+        failureCode: 'resource_quota_exceeded',
+      });
+  });
+
+  test('Runtime Host 按 UTF-8 字节数而非字符数计费多字节输出', async ({
+    page,
+  }) => {
+    await ensureGeneralNotebook(page);
+    const title = 'U12 Runtime UTF-8 Output Limit ' + Date.now();
+    const fixture = await createGeneratedWebAppFixture(page, title, {
+      maxOutputBytes: 4096,
+      script:
+        'window.educanvasRuntime.output("界".repeat(1500)); window.educanvasRuntime.succeed();',
+    });
+    await page.reload();
+
+    const studio = await openStudioOutput(page);
+    await studio.getByRole('button', { name: title }).click();
+    const runtime = page.getByTestId('persistent-web-runtime');
+    await expect(runtime).toHaveAttribute('data-runtime-state', 'failed', {
+      timeout: 30_000,
+    });
+    await expect
+      .poll(() => persistedRuntimeTerminal(fixture), { timeout: 10_000 })
+      .toEqual({
+        status: 'failed',
+        failureCode: 'resource_quota_exceeded',
+      });
+  });
+
   test('生成的 Web App 在离线/Runtime 不可用时给出恢复指引并可重试执行', async ({
     page,
   }) => {

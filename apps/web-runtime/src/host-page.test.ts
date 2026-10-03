@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { compileRuntimePayload } from './host-page';
+import { compileRuntimePayload, renderHostScript } from './host-page';
+import { MAX_RUNTIME_OUTPUT_BYTES } from './message-budget';
 import type { WebAppContent } from '@educanvas/canvas-protocol/server';
 
 const hash = (value: string) =>
@@ -19,6 +20,7 @@ describe('web app bootstrap payload compiler', () => {
       html: content.html,
       css: content.css,
       script: content.script,
+      maxOutputBytes: MAX_RUNTIME_OUTPUT_BYTES,
     });
   });
 
@@ -66,7 +68,48 @@ describe('web app bootstrap payload compiler', () => {
       html: '<div id="app"></div>',
       css: 'body{}',
       script: 'console.log(1)',
+      maxOutputBytes: 100_000,
     });
+  });
+
+  it('passes a bounded per-artifact output limit to the Runtime Host', () => {
+    const content: WebAppContent = {
+      schemaVersion: 1,
+      manifest: {
+        entry: 'index.html',
+        files: [
+          {
+            path: 'index.html',
+            mediaType: 'text/html',
+            content: '<div>ok</div>',
+            hash: hash('<div>ok</div>'),
+          },
+        ],
+      },
+      lockedDependencies: [],
+      capabilities: ['dom-manipulation'],
+      budget: {
+        maxInputBytes: 1_000,
+        maxMessageBytes: 1_000,
+        maxOutputBytes: MAX_RUNTIME_OUTPUT_BYTES * 2,
+        maxDurationMs: 1_000,
+        maxConcurrentInstances: 1,
+        maxQueueDepth: 1,
+        maxMessagesPerSecond: 1,
+      },
+      diagnostics: [],
+      generatedByModel: false,
+    };
+
+    expect(compileRuntimePayload(content).maxOutputBytes).toBe(
+      MAX_RUNTIME_OUTPUT_BYTES,
+    );
+    const hostScript = renderHostScript();
+    expect(hostScript).toContain('result.content.maxOutputBytes');
+    expect(hostScript).toContain('outputBytes > maxOutputBytes');
+    expect(hostScript).toContain(
+      `requestedOutputBytes > ${MAX_RUNTIME_OUTPUT_BYTES}`,
+    );
   });
 
   it('rejects duplicate manifest paths at host compile time', () => {

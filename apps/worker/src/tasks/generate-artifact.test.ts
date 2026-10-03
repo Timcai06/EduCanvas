@@ -562,10 +562,10 @@ describe('generateArtifact 媒体任务终态与重试证据', () => {
       budget: {
         maxInputBytes: 8_192,
         maxMessageBytes: 8_192,
-        maxOutputBytes: 16_000,
+        maxOutputBytes: 64 * 1024,
         maxDurationMs: 5_000,
         maxConcurrentInstances: 1,
-        maxQueueDepth: 10,
+        maxQueueDepth: 8,
         maxMessagesPerSecond: 5,
       },
       diagnostics: [{ code: 'build_succeeded' }],
