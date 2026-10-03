@@ -6,6 +6,9 @@ const file = path.resolve(process.env.E2E_NAVIGATION_SERVER_LOG);
 fs.mkdirSync(path.dirname(file), { recursive: true });
 const emit = http.Server.prototype.emit;
 let requestId = 0;
+let records = 0;
+const stream = fs.createWriteStream(file, { flags: 'a' });
+stream.on('error', () => {});
 http.Server.prototype.emit = function (event, ...args) {
   if (event === 'request') {
     const [request, response] = args;
@@ -16,11 +19,12 @@ http.Server.prototype.emit = function (event, ...args) {
       (pathname === '/' || pathname.startsWith('/notebook/'))
     ) {
       const id = ++requestId;
-      const log = (kind, bytes = 0) =>
-        fs.appendFileSync(
-          file,
-          JSON.stringify({ at: Date.now(), id, kind, bytes }) + '\n',
-        );
+      const log = (kind, bytes = 0) => {
+        if (records++ < 2000)
+          stream.write(
+            JSON.stringify({ at: Date.now(), id, kind, bytes }) + '\n',
+          );
+      };
       log('request');
       let first = true;
       for (const method of ['write', 'end']) {

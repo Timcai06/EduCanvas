@@ -1,7 +1,8 @@
+import { chromium, type FullConfig } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { createHash } from 'node:crypto';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createE2eWorkerLogAudit } from '../../tooling/e2e/e2e-worker-log-audit.mjs';
 import {
@@ -9,9 +10,20 @@ import {
   tryParseLogRecord,
 } from '../../tooling/local/local-process-pipe.mjs';
 
+const timing: Record<string, unknown>[] = [];
+let fixtureRequestId = 0;
+const fixtureRequests = new WeakMap<IncomingMessage, number>();
+function recordTiming(event: string, fields: Record<string, unknown> = {}) {
+  if (process.env.E2E_NAVIGATION_DIAGNOSTICS && timing.length < 2000) {
+    timing.push({ at: Date.now(), event, ...fields });
+  }
+}
+
 async function readBody(request: IncomingMessage): Promise<unknown> {
+  recordTiming('fixture.body.start', { id: fixtureRequests.get(request) });
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  recordTiming('fixture.body.end', { id: fixtureRequests.get(request) });
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
@@ -116,6 +128,22 @@ async function startFixtureProvider(): Promise<{
   baseUrl: string;
 }> {
   const server = createServer(async (request, response) => {
+    const id = ++fixtureRequestId;
+    fixtureRequests.set(request, id);
+    const kind =
+      request.url === '/v1/chat/completions'
+        ? 'structured'
+        : request.url === '/v1/audio/speech'
+          ? 'speech'
+          : 'other';
+    recordTiming('fixture.request', { id, kind });
+    response.once('finish', () =>
+      recordTiming('fixture.response.finish', {
+        id,
+        kind,
+        status: response.statusCode,
+      }),
+    );
     if (request.url === '/v1/audio/speech') {
       for await (const _chunk of request) {
         // drain request before responding
@@ -206,12 +234,54 @@ async function startFixtureProvider(): Promise<{
  * 产物生成链路才是端到端而不是纸面)。worker 连接 E2E 隔离库并在启动时
  * 自迁移 graphile schema;退出由 globalSetup 返回的 teardown 负责。
  */
-export default async function globalSetup(): Promise<() => Promise<void>> {
+export default async function globalSetup(
+  config: FullConfig,
+): Promise<() => Promise<void>> {
   const databaseUrl = process.env.E2E_DATABASE_URL;
   if (!databaseUrl) throw new Error('E2E_DATABASE_URL 未设置');
   const objectStorageRoot = path.resolve('output/playwright/object-storage');
   await rm(objectStorageRoot, { recursive: true, force: true });
   await mkdir(objectStorageRoot, { recursive: true });
+  const chromiumProject = config.projects.find((project) =>
+    project.name.startsWith('chromium'),
+  );
+  if (chromiumProject) {
+    const browser = await chromium.launch(chromiumProject.use.launchOptions);
+    try {
+      const session = await browser.newBrowserCDPSession();
+      const { gpu } = await session.send('SystemInfo.getInfo');
+      const page = await browser.newPage();
+      const webGl2 = await page.evaluate(() =>
+        (() => {
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 2;
+          const gl = canvas.getContext('webgl2');
+          if (!gl) return { available: false, pixel: [] as number[] };
+          gl.clearColor(1, 0, 0, 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+          const pixel = new Uint8Array(4);
+          gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+          return { available: true, pixel: Array.from(pixel) };
+        })(),
+      );
+      await writeFile(
+        path.resolve('output/playwright/browser-renderer.json'),
+        JSON.stringify({
+          version: browser.version(),
+          renderer: gpu.auxAttributes?.glRenderer,
+          vendor: gpu.auxAttributes?.glVendor,
+          webGl2: webGl2.available,
+          drawingVerified: webGl2.pixel.join(',') === '255,0,0,255',
+        }),
+      );
+      if (!webGl2.available || webGl2.pixel.join(',') !== '255,0,0,255')
+        throw new Error(
+          'Chromium E2E WebGL2 绘制不可用，拒绝用装饰降级掩盖渲染覆盖',
+        );
+    } finally {
+      await browser.close();
+    }
+  }
   const fixtureProvider = await startFixtureProvider();
   const workerLogAudit = createE2eWorkerLogAudit();
 
@@ -258,9 +328,31 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         resolve();
       }
     });
+    const taskTiming = createLineSplitter((line: string) => {
+      const record = tryParseLogRecord(line);
+      if (
+        !record ||
+        !['worker.job.failed', 'worker.job.completed'].includes(record.event)
+      )
+        return;
+      const fields: Record<string, unknown> = {};
+      for (const key of ['attempt', 'maxAttempts', 'durationMs']) {
+        if (typeof record[key] === 'number' && Number.isFinite(record[key]))
+          fields[key] = record[key];
+      }
+      for (const key of ['taskIdentifier', 'jobId']) {
+        if (
+          typeof record[key] === 'string' &&
+          /^[a-zA-Z0-9:_-]{1,120}$/.test(record[key])
+        )
+          fields[key] = record[key];
+      }
+      recordTiming(record.event, fields);
+    });
     worker.stdout?.on('data', (chunk: Buffer) => {
       workerLogAudit.ingest(chunk);
       readiness.push(chunk);
+      taskTiming.push(chunk);
     });
     worker.stderr?.on('data', (chunk: Buffer) => {
       workerLogAudit.ingest(chunk);
@@ -299,6 +391,12 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
         error ? reject(error) : resolve(),
       ),
     );
+    if (process.env.E2E_NAVIGATION_DIAGNOSTICS) {
+      await writeFile(
+        path.resolve('output/playwright/worker-timing.json'),
+        JSON.stringify(timing),
+      );
+    }
     await rm(objectStorageRoot, { recursive: true, force: true });
     workerLogAudit.assertClean();
   };

@@ -77,14 +77,20 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: { args: ['--use-angle=gl'] },
+      },
     },
     // Q05：移动 viewport 进入稳定 lane（第二 device 环境）。
     // 与 desktop 同一浏览器内核，不新增 CI 浏览器安装；
     // 响应式回归由本 project 在每次 PR 必跑捕获。
     {
       name: 'chromium-mobile',
-      use: { ...devices['Pixel 7'] },
+      use: {
+        ...devices['Pixel 7'],
+        launchOptions: { args: ['--use-angle=gl'] },
+      },
     },
     // W06：第二引擎进入稳定 lane（Desktop + Mobile viewport + 跨内核）。
     // Firefox 与 @ui lane 复用同一安装，

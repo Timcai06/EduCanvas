@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -353,30 +353,53 @@ export async function waitForGenerationJobSucceeded(
   jobId: string,
   timeoutMs = 60_000,
 ): Promise<void> {
-  await expect
-    .poll(
-      async () => {
-        const conversationId = await activeConversationId(page);
-        const { dbModule, internalDbModule, drizzleModule } =
-          await importArtifactDeps();
-        process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
-        const [conversation] = await internalDbModule
-          .getDb()
-          .select({ ownerSubjectId: dbModule.conversations.ownerSubjectId })
-          .from(dbModule.conversations)
-          .where(drizzleModule.eq(dbModule.conversations.id, conversationId))
-          .limit(1);
-        if (!conversation) return null;
-        const repository = new dbModule.DrizzlePlatformArtifactRepository();
-        const job = await repository.getGenerationJob({
-          jobId,
-          trustedSubjectId: conversation.ownerSubjectId,
-        });
-        return job.status;
-      },
-      { timeout: timeoutMs, intervals: [200, 300, 500, 1000] },
-    )
-    .toBe('succeeded');
+  const observations: {
+    at: number;
+    status: string;
+    progress: number | null;
+    failureCode: string | null;
+  }[] = [];
+  try {
+    await expect
+      .poll(
+        async () => {
+          const conversationId = await activeConversationId(page);
+          const { dbModule, internalDbModule, drizzleModule } =
+            await importArtifactDeps();
+          process.env.DATABASE_URL = process.env.E2E_DATABASE_URL;
+          const [conversation] = await internalDbModule
+            .getDb()
+            .select({ ownerSubjectId: dbModule.conversations.ownerSubjectId })
+            .from(dbModule.conversations)
+            .where(drizzleModule.eq(dbModule.conversations.id, conversationId))
+            .limit(1);
+          if (!conversation) return null;
+          const repository = new dbModule.DrizzlePlatformArtifactRepository();
+          const job = await repository.getGenerationJob({
+            jobId,
+            trustedSubjectId: conversation.ownerSubjectId,
+          });
+          if (observations.length < 120)
+            observations.push({
+              at: Date.now(),
+              status: job.status,
+              progress: job.progress,
+              failureCode:
+                job.failureCode?.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) ??
+                null,
+            });
+          return job.status;
+        },
+        { timeout: timeoutMs, intervals: [200, 300, 500, 1000] },
+      )
+      .toBe('succeeded');
+  } catch (error) {
+    await test.info().attach('generation-job-observation', {
+      body: JSON.stringify({ jobId, observations }),
+      contentType: 'application/json',
+    });
+    throw error;
+  }
 }
 
 export async function createAudioOverviewFixture(
