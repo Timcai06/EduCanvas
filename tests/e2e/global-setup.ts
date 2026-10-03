@@ -1,9 +1,9 @@
 import { chromium, type FullConfig } from '@playwright/test';
-import { spawn, type ChildProcess } from 'node:child_process';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { createHash } from 'node:crypto';
 import { mkdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { spawnE2eWorker } from '../../tooling/e2e/e2e-worker-process.mjs';
 import { createE2eWorkerLogAudit } from '../../tooling/e2e/e2e-worker-log-audit.mjs';
 import {
   createLineSplitter,
@@ -299,107 +299,93 @@ export default async function globalSetup(
   const fixtureProvider = await startFixtureProvider();
   const workerLogAudit = createE2eWorkerLogAudit();
 
-  const worker: ChildProcess = spawn(
-    'pnpm',
-    ['--filter', '@educanvas/worker', 'start'],
-    {
-      // Windows 上 pnpm 是 pnpm.cmd，Node spawn 默认不解析 .cmd；
-      // Linux CI 的 PATH 直接有 pnpm 可执行。命令与参数均为常量，无注入面。
-      shell: process.platform === 'win32',
-      env: {
-        ...process.env,
-        DATABASE_URL: databaseUrl,
-        /* 只连接进程内 fixture Provider；不读取真实 Key，也不产生外部费用。 */
-        EDUCANVAS_DEPLOYMENT_ENV: 'test',
-        MODEL_GATEWAY_PROVIDER: 'openai-compatible',
-        MODEL_GATEWAY_BASE_URL: fixtureProvider.baseUrl,
-        MODEL_GATEWAY_API_KEY: 'e2e-fixture-key',
-        MODEL_GATEWAY_PRIMARY_MODEL: 'primary-e2e',
-        MODEL_GATEWAY_STRUCTURED_MODEL: 'structured-e2e',
-        MODEL_GATEWAY_SPEECH_MODEL: 'speech-e2e',
-        MODEL_GATEWAY_SPEECH_VOICE: 'alloy',
-        /* Web 上传与 Worker 派生任务必须读取同一隔离根；否则预览任务会在
-           默认 uploads 目录找不到 E2E 资产，并以重试占满 Worker。 */
-        ASSET_STORAGE_ROOT: objectStorageRoot,
-        OBJECT_STORAGE_ROOT: objectStorageRoot,
-      },
-      stdio: ['ignore', 'pipe', 'pipe'],
+  const workerProcess = spawnE2eWorker({
+    entrypoint: path.resolve('apps/worker/dist/index.js'),
+    cwd: path.resolve('apps/worker'),
+    environment: {
+      ...process.env,
+      DATABASE_URL: databaseUrl,
+      /* 只连接进程内 fixture Provider；不读取真实 Key，也不产生外部费用。 */
+      EDUCANVAS_DEPLOYMENT_ENV: 'test',
+      MODEL_GATEWAY_PROVIDER: 'openai-compatible',
+      MODEL_GATEWAY_BASE_URL: fixtureProvider.baseUrl,
+      MODEL_GATEWAY_API_KEY: 'e2e-fixture-key',
+      MODEL_GATEWAY_PRIMARY_MODEL: 'primary-e2e',
+      MODEL_GATEWAY_STRUCTURED_MODEL: 'structured-e2e',
+      MODEL_GATEWAY_SPEECH_MODEL: 'speech-e2e',
+      MODEL_GATEWAY_SPEECH_VOICE: 'alloy',
+      /* Web 上传与 Worker 派生任务必须读取同一隔离根；否则预览任务会在
+         默认 uploads 目录找不到 E2E 资产，并以重试占满 Worker。 */
+      ASSET_STORAGE_ROOT: objectStorageRoot,
+      OBJECT_STORAGE_ROOT: objectStorageRoot,
     },
-  );
-
-  await new Promise<void>((resolve, reject) => {
-    // 90s：Linux CI 上 pnpm shim 冷启动约数秒；Windows 本地 pnpm --filter
-    // 解析 workspace 并输出引擎 WARN 明显更慢，30s 是 CI 级偶发超时源。
-    // 只认统一日志协议的 worker.ready，避免展示文案变化破坏 readiness。
-    const timeout = setTimeout(
-      () => reject(new Error('worker 启动超时(90s)')),
-      90_000,
-    );
-    const readiness = createLineSplitter((line: string) => {
-      const record = tryParseLogRecord(line);
-      if (record?.service === 'worker' && record.event === 'worker.ready') {
-        clearTimeout(timeout);
-        resolve();
-      }
-    });
-    const taskTiming = createLineSplitter((line: string) => {
-      const record = tryParseLogRecord(line);
-      if (
-        !record ||
-        !['worker.job.failed', 'worker.job.completed'].includes(record.event)
-      )
-        return;
-      const fields: Record<string, unknown> = {};
-      for (const key of ['attempt', 'maxAttempts', 'durationMs']) {
-        if (typeof record[key] === 'number' && Number.isFinite(record[key]))
-          fields[key] = record[key];
-      }
-      for (const key of ['taskIdentifier', 'jobId']) {
-        if (
-          typeof record[key] === 'string' &&
-          /^[a-zA-Z0-9:_-]{1,120}$/.test(record[key])
-        )
-          fields[key] = record[key];
-      }
-      recordTiming(record.event, fields);
-    });
-    worker.stdout?.on('data', (chunk: Buffer) => {
-      workerLogAudit.ingest(chunk);
-      readiness.push(chunk);
-      taskTiming.push(chunk);
-    });
-    worker.stderr?.on('data', (chunk: Buffer) => {
-      workerLogAudit.ingest(chunk);
-      process.stderr.write(`[e2e-worker] ${chunk.toString()}`);
-    });
-    worker.on('exit', (code) => {
-      clearTimeout(timeout);
-      reject(new Error(`worker 提前退出,code=${code}`));
-    });
   });
+  const worker = workerProcess.child;
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      // 跨平台保留有界启动预算，只认统一日志协议的 worker.ready，
+      // 避免数据库初始化耗时或展示文案变化破坏 readiness。
+      const timeout = setTimeout(
+        () => reject(new Error('worker 启动超时(90s)')),
+        90_000,
+      );
+      const readiness = createLineSplitter((line: string) => {
+        const record = tryParseLogRecord(line);
+        if (record?.service === 'worker' && record.event === 'worker.ready') {
+          clearTimeout(timeout);
+          resolve();
+        }
+      });
+      const taskTiming = createLineSplitter((line: string) => {
+        const record = tryParseLogRecord(line);
+        if (
+          !record ||
+          !['worker.job.failed', 'worker.job.completed'].includes(record.event)
+        )
+          return;
+        const fields: Record<string, unknown> = {};
+        for (const key of ['attempt', 'maxAttempts', 'durationMs']) {
+          if (typeof record[key] === 'number' && Number.isFinite(record[key]))
+            fields[key] = record[key];
+        }
+        for (const key of ['taskIdentifier', 'jobId']) {
+          if (
+            typeof record[key] === 'string' &&
+            /^[a-zA-Z0-9:_-]{1,120}$/.test(record[key])
+          )
+            fields[key] = record[key];
+        }
+        recordTiming(record.event, fields);
+      });
+      worker.stdout?.on('data', (chunk: Buffer) => {
+        workerLogAudit.ingest(chunk);
+        readiness.push(chunk);
+        taskTiming.push(chunk);
+      });
+      worker.stderr?.on('data', (chunk: Buffer) => {
+        workerLogAudit.ingest(chunk);
+        process.stderr.write(`[e2e-worker] ${chunk.toString()}`);
+      });
+      worker.once('error', (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      worker.on('exit', (code) => {
+        clearTimeout(timeout);
+        reject(new Error(`worker 提前退出,code=${code}`));
+      });
+    });
+  } catch (error) {
+    await workerProcess.stop();
+    await new Promise<void>((resolve) =>
+      fixtureProvider.server.close(() => resolve()),
+    );
+    throw error;
+  }
 
   return async () => {
-    if (worker.exitCode === null && worker.signalCode === null) {
-      const exited = new Promise<void>((resolve) =>
-        worker.once('exit', () => resolve()),
-      );
-      worker.kill('SIGTERM');
-      let forceKillTimer: NodeJS.Timeout | undefined;
-      try {
-        await Promise.race([
-          exited,
-          new Promise<void>((resolve) => {
-            forceKillTimer = setTimeout(resolve, 5_000);
-          }),
-        ]);
-      } finally {
-        if (forceKillTimer) clearTimeout(forceKillTimer);
-      }
-      if (worker.exitCode === null && worker.signalCode === null) {
-        worker.kill('SIGKILL');
-        await exited;
-      }
-    }
+    await workerProcess.stop();
     await new Promise<void>((resolve, reject) =>
       fixtureProvider.server.close((error) =>
         error ? reject(error) : resolve(),
