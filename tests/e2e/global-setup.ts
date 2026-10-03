@@ -255,13 +255,21 @@ export default async function globalSetup(
         (() => {
           const canvas = document.createElement('canvas');
           canvas.width = canvas.height = 2;
+          let creationError = '';
+          canvas.addEventListener('webglcontextcreationerror', (event) => {
+            creationError = (event as WebGLContextEvent).statusMessage.slice(
+              0,
+              500,
+            );
+          });
           const gl = canvas.getContext('webgl2');
-          if (!gl) return { available: false, pixel: [] as number[] };
+          if (!gl)
+            return { available: false, pixel: [] as number[], creationError };
           gl.clearColor(1, 0, 0, 1);
           gl.clear(gl.COLOR_BUFFER_BIT);
           const pixel = new Uint8Array(4);
           gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-          return { available: true, pixel: Array.from(pixel) };
+          return { available: true, pixel: Array.from(pixel), creationError };
         })(),
       );
       await writeFile(
@@ -270,6 +278,12 @@ export default async function globalSetup(
           version: browser.version(),
           renderer: gpu.auxAttributes?.glRenderer,
           vendor: gpu.auxAttributes?.glVendor,
+          features: {
+            webgl: gpu.featureStatus?.webgl,
+            webgl2: gpu.featureStatus?.webgl2,
+            opengl: gpu.featureStatus?.opengl,
+          },
+          creationError: webGl2.creationError,
           webGl2: webGl2.available,
           drawingVerified: webGl2.pixel.join(',') === '255,0,0,255',
         }),

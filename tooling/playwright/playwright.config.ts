@@ -79,7 +79,12 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
-        launchOptions: { args: ['--use-angle=gl'] },
+        launchOptions: {
+          args: [
+            '--use-angle=gl',
+            ...(process.platform === 'linux' ? ['--ignore-gpu-blocklist'] : []),
+          ],
+        },
       },
     },
     // Q05：移动 viewport 进入稳定 lane（第二 device 环境）。
@@ -89,7 +94,12 @@ export default defineConfig({
       name: 'chromium-mobile',
       use: {
         ...devices['Pixel 7'],
-        launchOptions: { args: ['--use-angle=gl'] },
+        launchOptions: {
+          args: [
+            '--use-angle=gl',
+            ...(process.platform === 'linux' ? ['--ignore-gpu-blocklist'] : []),
+          ],
+        },
       },
     },
     // W06：第二引擎进入稳定 lane（Desktop + Mobile viewport + 跨内核）。
