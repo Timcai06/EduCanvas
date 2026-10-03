@@ -339,45 +339,33 @@ test('@ui Learning Rail 桌面默认折叠，移动端以模态学习记录打�
   await expect(
     desktopDialog.getByRole('navigation', { name: '学习记录' }),
   ).toBeVisible();
+  const notebookRoute = /^\/notebook\/([0-9a-f-]+)\/learn$/.exec(
+    new URL(page.url()).pathname,
+  );
+  expect(notebookRoute).not.toBeNull();
+  const notebookId = notebookRoute![1]!;
   const currentSession = page.locator('[aria-current="page"]');
   await expect(currentSession).toHaveCount(1);
   const originalSessionId =
-    await currentSession.getAttribute('data-session-id');
+    (await currentSession.getAttribute('data-session-id'))!;
   expect(originalSessionId).toBeTruthy();
   await expect(page.getByPlaceholder('搜索学习记录')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '加载更多' })).toHaveCount(0);
 
-  const newLearningResponse = page.waitForResponse(
-    (response) =>
-      response.request().method() === 'POST' &&
-      new URL(response.url()).pathname === '/learn',
-  );
-  await page.getByRole('button', { name: '开始新学习' }).click();
-  await newLearningResponse;
+  // The notebook-scoped workspace exposes resume, not new-session creation.
+  // /learn resolves to this notebook's supported route and keeps its session.
+  await page.goto('/learn');
+  await expect(page).toHaveURL(new RegExp(`/notebook/${notebookId}/learn$`));
   await expect(
     page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   await page.getByRole('button', { name: '打开学习记录' }).click();
-  const currentNewSession = page.locator('[aria-current="page"]');
-  await expect(currentNewSession).toHaveCount(1);
-  expect(await currentNewSession.getAttribute('data-session-id')).not.toBe(
-    originalSessionId,
+  const activeNotebookSession = page.locator(
+    `[aria-current="page"][data-session-id="${originalSessionId}"]`,
   );
-  const archivedSession = page.locator(
-    `button[data-session-id="${originalSessionId}"]`,
-  );
-  await expect(archivedSession).toBeVisible();
-  await archivedSession.click();
-  await expect(
-    page.getByRole('heading', { name: '今天想学什么？' }),
-  ).toBeVisible();
-  await page.getByRole('button', { name: '打开学习记录' }).click();
-  await expect(
-    page.locator(
-      `[aria-current="page"][data-session-id="${originalSessionId}"]`,
-    ),
-  ).toHaveCount(1);
-
+  await expect(activeNotebookSession).toHaveCount(1);
+  await expect(activeNotebookSession).toBeVisible();
+  await expect(page.getByRole('dialog', { name: '学习记录' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: '学习记录' })).toHaveCount(0);
   await ensureConversationUi(page);
@@ -387,11 +375,15 @@ test('@ui Learning Rail 桌面默认折叠，移动端以模态学习记录打�
   const dialog = page.getByRole('dialog', { name: '学习记录' });
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute('aria-modal', 'true');
+  await expect(
+    dialog.locator(
+      `[aria-current="page"][data-session-id="${originalSessionId}"]`,
+    ),
+  ).toHaveCount(1);
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
   await expect(mobileTrigger).toBeFocused();
 });
-
 test('「+」菜单开放真实上传能力，并跳过尚未接入的动作', async ({ page }) => {
   await openLearningWorkspace(page);
   await page.getByRole('button', { name: '添加来源' }).click();

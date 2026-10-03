@@ -305,9 +305,7 @@ export function MindMapRenderer({
                 data-mindmap-node={node.id}
                 role="treeitem"
                 aria-level={node.depth + 1}
-                aria-expanded={
-                  node.children.length > 0 ? !isCollapsed : undefined
-                }
+                aria-expanded={node.hasChildren ? !isCollapsed : undefined}
                 aria-selected={isFocused}
                 tabIndex={isFocused ? 0 : -1}
                 onFocus={() => setFocusedNodeId(node.id)}

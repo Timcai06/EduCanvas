@@ -30,6 +30,7 @@ describe('MindMapRenderer', () => {
 
     expect(html).toContain('role="tree"');
     expect(html.match(/role="treeitem"/g)).toHaveLength(2);
+    expect(html).toContain('aria-expanded="true"');
     expect(html).toContain('根节点');
     expect(html).toContain('一级节点');
     expect(html).toContain('提问：一级节点');
