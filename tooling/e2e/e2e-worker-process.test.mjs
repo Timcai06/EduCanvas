@@ -13,7 +13,10 @@ async function fixture(t, onTerminate) {
   const entrypoint = path.join(cwd, 'worker.mjs');
   await writeFile(
     entrypoint,
-    `setInterval(() => {}, 1000);
+    `import { existsSync } from 'node:fs';
+setInterval(() => {
+  if (existsSync('complete')) { ${onTerminate} }
+}, 10);
 process.on('SIGTERM', () => { ${onTerminate} });
 console.log(JSON.stringify({ pid: process.pid }));`,
   );
@@ -53,7 +56,7 @@ console.log(JSON.stringify({ pid: process.pid }));`,
   } finally {
     clearTimeout(timeout);
   }
-  return { ...handle, pid };
+  return { ...handle, pid, cwd };
 }
 
 test('forced teardown terminates the actual queue consumer and closes its audit stream', async (t) => {
@@ -68,7 +71,7 @@ test('forced teardown terminates the actual queue consumer and closes its audit 
   assert.equal(stdoutClosed, true);
 });
 
-test('graceful teardown drains the final worker audit before returning and is repeatable', async (t) => {
+test('completed-worker teardown drains the final audit before returning and is repeatable', async (t) => {
   const handle = await fixture(
     t,
     `console.log('final-audit-record'); process.exit(0);`,
@@ -77,7 +80,16 @@ test('graceful teardown drains the final worker audit before returning and is re
   handle.child.stdout.on('data', (chunk) => {
     output += chunk.toString();
   });
+  let stdoutClosed = false;
+  handle.child.stdout.once('close', () => {
+    stdoutClosed = true;
+  });
+  // Windows terminates Node immediately for SIGTERM; complete the task through a file barrier instead.
+  const exited = once(handle.child, 'exit');
+  await writeFile(path.join(handle.cwd, 'complete'), 'complete');
+  await exited;
   await handle.stop(5000);
+  assert.equal(stdoutClosed, true);
   assert.equal(handle.child.exitCode, 0);
   assert.match(output, /final-audit-record/);
   await handle.stop(100);
