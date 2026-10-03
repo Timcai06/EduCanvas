@@ -9,6 +9,25 @@ import {
   useResizableSidebar,
 } from './use-resizable-sidebar';
 
+function scheduleNotebookTriggerFocus(sidebar: HTMLElement | null) {
+  window.requestAnimationFrame(() => {
+    if (
+      !sidebar?.isConnected ||
+      sidebar.getAttribute('aria-hidden') !== 'true'
+    ) {
+      return;
+    }
+    // 关闭后的延迟回调不能夺走用户已移到输入框等新控件的焦点。
+    const active = document.activeElement;
+    if (active !== document.body && !sidebar.contains(active)) return;
+    document
+      .querySelector<HTMLButtonElement>(
+        '[aria-controls="conversation-sidebar"]',
+      )
+      ?.focus();
+  });
+}
+
 /** Notebook 选择和子对话共享抽屉；保留键盘关闭、焦点恢复及宽度调整。 */
 export function ConversationSidebar({
   open,
@@ -34,13 +53,7 @@ export function ConversationSidebar({
   });
   const close = () => {
     onClose();
-    window.requestAnimationFrame(() =>
-      document
-        .querySelector<HTMLButtonElement>(
-          '[aria-controls="conversation-sidebar"]',
-        )
-        ?.focus(),
-    );
+    scheduleNotebookTriggerFocus(sidebarRef.current);
   };
   useEffect(() => {
     if (!open) return;
@@ -55,13 +68,7 @@ export function ConversationSidebar({
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
-        window.requestAnimationFrame(() =>
-          document
-            .querySelector<HTMLButtonElement>(
-              '[aria-controls="conversation-sidebar"]',
-            )
-            ?.focus(),
-        );
+        scheduleNotebookTriggerFocus(sidebarRef.current);
       }
     };
     document.addEventListener('keydown', onKey);
