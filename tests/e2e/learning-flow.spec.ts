@@ -58,6 +58,129 @@ async function startLearning(page: Page) {
   await expect(page.getByText('请打开互动演示，让我动手试试。')).toBeVisible();
 }
 
+/** Seed a second session in the current Notebook without adding a product entry. */
+async function seedNotebookResumeSession(
+  notebookId: string,
+  activeSessionId: string,
+): Promise<string> {
+  const databaseUrl = process.env.E2E_DATABASE_URL;
+  if (!databaseUrl) throw new Error('E2E_DATABASE_URL 未设置');
+  process.env.DATABASE_URL = databaseUrl;
+  const [dbModule, testingModule] = await Promise.all([
+    import('@educanvas/db'),
+    import('@educanvas/db/testing'),
+  ]);
+  const [activeSession] = await testingModule
+    .getDb()
+    .select({
+      studentId: testingModule.lessonSessions.studentId,
+      gradeBand: testingModule.lessonSessions.gradeBand,
+      courseSlug: testingModule.lessonSessions.courseSlug,
+      knowledgeNodeId: testingModule.lessonSessions.knowledgeNodeId,
+      notebookId: testingModule.lessonSessions.notebookId,
+      status: testingModule.lessonSessions.status,
+    })
+    .from(testingModule.lessonSessions)
+    .where(testingModule.eq(testingModule.lessonSessions.id, activeSessionId))
+    .limit(1);
+  if (
+    !activeSession ||
+    activeSession.notebookId !== notebookId ||
+    !activeSession.knowledgeNodeId ||
+    activeSession.status !== 'active'
+  ) {
+    throw new Error('当前活动学习会话不属于目标笔记本');
+  }
+
+  const [storedArtifact] = await testingModule
+    .getDb()
+    .select({
+      schemaVersion: testingModule.canvasArtifacts.schemaVersion,
+      artifactId: testingModule.canvasArtifacts.artifactId,
+      type: testingModule.canvasArtifacts.type,
+      title: testingModule.canvasArtifacts.title,
+      params: testingModule.canvasArtifacts.params,
+      gradingKey: testingModule.canvasArtifactGradingKeys.gradingKey,
+    })
+    .from(testingModule.canvasArtifacts)
+    .innerJoin(
+      testingModule.canvasArtifactGradingKeys,
+      testingModule.eq(
+        testingModule.canvasArtifactGradingKeys.artifactRecordId,
+        testingModule.canvasArtifacts.id,
+      ),
+    )
+    .where(
+      testingModule.eq(
+        testingModule.canvasArtifacts.sessionId,
+        activeSessionId,
+      ),
+    )
+    .limit(1);
+  if (!storedArtifact) throw new Error('当前活动学习会话缺少课程练习');
+  const publicParams = storedArtifact.params as {
+    prompt: string;
+    categories: unknown[];
+    items: { id: string; label: string; emoji?: string }[];
+  };
+  const gradingKey = storedArtifact.gradingKey as {
+    type: string;
+    items?: { itemId: string; correctCategoryId: string }[];
+    successMessage?: string;
+  };
+  if (storedArtifact.type !== 'classification_game' || !gradingKey.items) {
+    throw new Error(`暂不支持复制课程练习类型：${storedArtifact.type}`);
+  }
+  const completeArtifact = {
+    schemaVersion: storedArtifact.schemaVersion,
+    artifactId: storedArtifact.artifactId,
+    type: storedArtifact.type,
+    title: storedArtifact.title,
+    params: {
+      ...publicParams,
+      items: publicParams.items.map((item) => {
+        const grading = gradingKey.items?.find(
+          (candidate) => candidate.itemId === item.id,
+        );
+        if (!grading) throw new Error(`课程练习缺少答案：${item.id}`);
+        return { ...item, correctCategoryId: grading.correctCategoryId };
+      }),
+      ...(gradingKey.successMessage
+        ? { successMessage: gradingKey.successMessage }
+        : {}),
+    },
+  };
+
+  const created =
+    await new dbModule.DrizzleLearningSessionRepository().startNew({
+      studentId: activeSession.studentId,
+      gradeBand: activeSession.gradeBand,
+      courseSlug: activeSession.courseSlug,
+      knowledgeNodeId: activeSession.knowledgeNodeId,
+      notebookId,
+      completeArtifact,
+    });
+  return created.sessionId;
+}
+
+async function listNotebookSessionStatuses(notebookId: string) {
+  const databaseUrl = process.env.E2E_DATABASE_URL;
+  if (!databaseUrl) throw new Error('E2E_DATABASE_URL 未设置');
+  process.env.DATABASE_URL = databaseUrl;
+  const testingModule = await import('@educanvas/db/testing');
+  return testingModule
+    .getDb()
+    .select({
+      id: testingModule.lessonSessions.id,
+      notebookId: testingModule.lessonSessions.notebookId,
+      status: testingModule.lessonSessions.status,
+    })
+    .from(testingModule.lessonSessions)
+    .where(
+      testingModule.eq(testingModule.lessonSessions.notebookId, notebookId),
+    );
+}
+
 /** 学习页优先消费老师消息中的快捷入口，否则从“本课产物”打开预置 Canvas。 */
 async function openCanvasFromChat(page: Page): Promise<Locator> {
   const quickOpen = page.getByRole('button', { name: '打开互动演示' });
@@ -352,20 +475,73 @@ test('@ui Learning Rail 桌面默认折叠，移动端以模态学习记录打�
   await expect(page.getByPlaceholder('搜索学习记录')).toHaveCount(0);
   await expect(page.getByRole('button', { name: '加载更多' })).toHaveCount(0);
 
-  // The notebook-scoped workspace exposes resume, not new-session creation.
-  // /learn resolves to this notebook's supported route and keeps its session.
-  await page.goto('/learn');
+  // Notebook learning intentionally exposes resume only. Seed a second session
+  // in this Notebook through the DB testing API, then exercise the real rail action.
+  const resumedSessionId = await seedNotebookResumeSession(
+    notebookId,
+    originalSessionId,
+  );
+  expect(resumedSessionId).not.toBe(originalSessionId);
+  const seededStatuses = await listNotebookSessionStatuses(notebookId);
+  expect(seededStatuses).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: originalSessionId,
+        notebookId,
+        status: 'archived',
+      }),
+      expect.objectContaining({
+        id: resumedSessionId,
+        notebookId,
+        status: 'active',
+      }),
+    ]),
+  );
+
+  await page.reload();
   await expect(page).toHaveURL(new RegExp(`/notebook/${notebookId}/learn$`));
   await expect(
     page.getByRole('heading', { name: '今天想学什么？' }),
   ).toBeVisible();
   await page.getByRole('button', { name: '打开学习记录' }).click();
-  const activeNotebookSession = page.locator(
+  const currentNewSession = page.locator('[aria-current="page"]');
+  await expect(currentNewSession).toHaveAttribute(
+    'data-session-id',
+    resumedSessionId,
+  );
+  const archivedSession = page.locator(
+    `button[data-session-id="${originalSessionId}"]`,
+  );
+  await expect(archivedSession).toBeVisible();
+  await archivedSession.click();
+  await expect(page).toHaveURL(new RegExp(`/notebook/${notebookId}/learn$`));
+  await expect(
+    page.getByRole('heading', { name: '今天想学什么？' }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: '打开学习记录' }).click();
+  const restoredSession = page.locator(
     `[aria-current="page"][data-session-id="${originalSessionId}"]`,
   );
-  await expect(activeNotebookSession).toHaveCount(1);
-  await expect(activeNotebookSession).toBeVisible();
-  await expect(page.getByRole('dialog', { name: '学习记录' })).toBeVisible();
+  await expect(restoredSession).toHaveCount(1);
+  await expect(restoredSession).toBeVisible();
+  const restoredStatuses = await listNotebookSessionStatuses(notebookId);
+  expect(restoredStatuses).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        id: originalSessionId,
+        notebookId,
+        status: 'active',
+      }),
+      expect.objectContaining({
+        id: resumedSessionId,
+        notebookId,
+        status: 'archived',
+      }),
+    ]),
+  );
+  await expect(
+    page.locator(`button[data-session-id="${resumedSessionId}"]`),
+  ).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog', { name: '学习记录' })).toHaveCount(0);
   await ensureConversationUi(page);
