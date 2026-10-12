@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="apps/web/app/icon.svg" width="76" alt="EduCanvas logo">
+  <img src="apps/web/public/favicon-light.svg" width="76" alt="EduCanvas logo">
 </p>
 
 <h1 align="center">EduCanvas</h1>
@@ -25,6 +25,20 @@
   <img src="https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white" alt="pnpm 10">
   <img src="https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white" alt="PostgreSQL 16">
 </p>
+
+## 一次对话如何执行
+
+一次对话由入口提供身份、Profile、传输方式与能力信息，再进入共享的 `TurnApplication` 和 `AgentLoopEngine`。模型负责提出回答或工具调用；工具的执行、预算、取消和事实记录由代码维护。
+
+![EduCanvas 共享执行链：入口、TurnApplication、AgentLoop、模型网关、工具与事实账本](docs/00-overview/readme-diagrams/system.png)
+
+图中是逻辑系统的轴测拆解：入口、运行时、适配器与事实账本的空间分层不代表请求执行顺序。
+
+- **循环可控。** 模型重试同样计入预算；取消后不继续触发工具副作用；工具结果经过校验再送回模型。
+- **入口共享实现。** Gateway 与 Web 的组合层使用同一个 `createTurnApplication` 工厂和 `ToolKernelPort` 契约，保留各入口的身份与能力差异。
+- **教育接入有边界。** 教育能力通过 Profile、Skills、Tools 与可信领域服务接入。学习状态、判分与掌握度由确定性服务端代码维护。
+
+实现入口：[`turn-composition.ts`](apps/gateway/src/turn-composition.ts)、[`agent-loop.ts`](packages/agent-runtime/src/agent-loop.ts)。跨入口能力与教学约束详见[智能体编排边界](docs/03-ai/01-智能体编排边界.md)。
 
 ## Why EduCanvas
 
